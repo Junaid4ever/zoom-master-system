@@ -6,6 +6,7 @@ import httpx
 import os
 import random
 from typing import List, Optional
+from datetime import datetime  # <-- YEH ADD KARO
 
 app = FastAPI()
 
@@ -21,9 +22,6 @@ app.add_middleware(
 # ============================================
 # CONFIGURATION
 # ============================================
-# 10 Projects × 42 Replicas × 5 Bots = 2,100 Bots per project
-# Total = 10 × 2,100 = 21,000 Bots capacity
-
 PROJECTS = []
 for i in range(1, 11):
     PROJECTS.append({
@@ -36,7 +34,7 @@ for i in range(1, 11):
         "status": "stopped"
     })
 
-TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 2,100 bots
+TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)
 
 # ============================================
 # INDIAN NAMES
@@ -65,28 +63,23 @@ ENGLISH_LAST_NAMES = [
 ]
 
 def generate_names(name_type, custom_names=None, count=1):
-    """Generate names based on type"""
     names = []
-    
     if name_type == "indian":
         for _ in range(count):
             first = random.choice(INDIAN_FIRST_NAMES)
             last = random.choice(INDIAN_LAST_NAMES)
             names.append(f"{first} {last}")
-    
     elif name_type == "english":
         for _ in range(count):
             first = random.choice(ENGLISH_FIRST_NAMES)
             last = random.choice(ENGLISH_LAST_NAMES)
             names.append(f"{first} {last}")
-    
     elif name_type == "custom" and custom_names:
         names = custom_names[:count]
         while len(names) < count:
             first = random.choice(INDIAN_FIRST_NAMES)
             last = random.choice(INDIAN_LAST_NAMES)
             names.append(f"{first} {last}")
-    
     return names[:count]
 
 # ============================================
