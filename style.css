@@ -1,0 +1,500 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0d0d1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+/* ========================================== */
+/* DASHBOARD */
+/* ========================================== */
+.dashboard {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 20px;
+}
+
+/* ========================================== */
+/* HEADER */
+/* ========================================== */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.header-left h1 {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(90deg, #7a5cff, #00d2ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(122, 92, 255, 0.15);
+    color: #7a5cff;
+    border: 1px solid rgba(122, 92, 255, 0.2);
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.usage {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.usage strong {
+    color: #fff;
+}
+
+.btn-new-ui,
+.btn-download {
+    padding: 6px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+}
+
+.btn-new-ui:hover,
+.btn-download:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+/* ========================================== */
+/* MAIN LAYOUT */
+/* ========================================== */
+.main {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 16px;
+}
+
+/* ========================================== */
+/* CARDS */
+/* ========================================== */
+.card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+}
+
+.card h2 {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 14px;
+}
+
+/* ========================================== */
+/* FORM ELEMENTS */
+/* ========================================== */
+.meeting-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.meeting-row.two-col {
+    grid-template-columns: 1fr 1fr;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.input-field {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    transition: all 0.3s;
+}
+
+.input-field:focus {
+    border-color: #7a5cff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.input-field::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+select.input-field {
+    appearance: none;
+    cursor: pointer;
+}
+
+select.input-field option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+/* ========================================== */
+/* BUTTONS */
+/* ========================================== */
+.action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.btn {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, #7a5cff, #00d2ff);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(122, 92, 255, 0.3);
+}
+
+.btn-danger {
+    background: linear-gradient(90deg, #ff4444, #ff6b6b);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+}
+
+/* ========================================== */
+/* STATUS BAR */
+/* ========================================== */
+.status-bar {
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    font-family: monospace;
+}
+
+.status-bar.success {
+    background: rgba(0, 255, 100, 0.06);
+    color: #00ff64;
+    border: 1px solid rgba(0, 255, 100, 0.1);
+}
+
+.status-bar.error {
+    background: rgba(255, 0, 0, 0.06);
+    color: #ff4444;
+    border: 1px solid rgba(255, 0, 0, 0.1);
+}
+
+.status-bar.running {
+    background: rgba(0, 210, 255, 0.06);
+    color: #00d2ff;
+    border: 1px solid rgba(0, 210, 255, 0.1);
+}
+
+/* ========================================== */
+/* CUSTOM NAMES */
+/* ========================================== */
+.custom-names-area {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.custom-names-area textarea {
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    font-family: monospace;
+    outline: none;
+    resize: vertical;
+}
+
+.custom-names-area textarea:focus {
+    border-color: #7a5cff;
+}
+
+/* ========================================== */
+/* TABLES */
+/* ========================================== */
+.task-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.task-table thead th {
+    text-align: left;
+    padding: 8px 6px;
+    color: rgba(255, 255, 255, 0.3);
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.task-table tbody td {
+    padding: 8px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.task-table .no-tasks {
+    text-align: center;
+    padding: 20px;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-action {
+    padding: 2px 8px;
+    background: rgba(255, 68, 68, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: #ff4444;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.btn-action:hover {
+    background: rgba(255, 68, 68, 0.2);
+}
+
+/* ========================================== */
+/* SCHEDULE ROW */
+/* ========================================== */
+.schedule-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+/* ========================================== */
+/* LOGS */
+/* ========================================== */
+#logsContainer {
+    max-height: 180px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.log-placeholder {
+    color: rgba(255, 255, 255, 0.2);
+    text-align: center;
+    padding: 20px;
+}
+
+.log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.log-entry .time {
+    color: rgba(255, 255, 255, 0.25);
+    margin-right: 8px;
+}
+
+/* ========================================== */
+/* TOGGLE SWITCH */
+/* ========================================== */
+.toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-switch .toggle-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    transition: all 0.3s;
+}
+
+.toggle-switch .toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: all 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: #7a5cff;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* ========================================== */
+/* SCROLLBAR */
+/* ========================================== */
+::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+/* ========================================== */
+/* RESPONSIVE */
+/* ========================================== */
+@media (max-width: 1200px) {
+    .main {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+    }
+    .header-right {
+        flex-wrap: wrap;
+    }
+    .meeting-row {
+        grid-template-columns: 1fr 1fr;
+    }
+    .action-row {
+        flex-wrap: wrap;
+    }
+    .schedule-row {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .meeting-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================== */
+/* LARGE TOGGLE FOR BILLING */
+/* ========================================== */
+.large-toggle {
+    width: 56px;
+    height: 30px;
+}
+
+.large-toggle .toggle-slider {
+    border-radius: 15px;
+}
+
+.large-toggle .toggle-slider::before {
+    height: 24px;
+    width: 24px;
+    left: 3px;
+    bottom: 3px;
+}
+
+.large-toggle input:checked + .toggle-slider::before {
+    transform: translateX(26px);
+}
+
+.billing-toggle-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
