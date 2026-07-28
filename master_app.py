@@ -1,10 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import httpx
 import os
 import random
+import asyncio
 from typing import List, Optional
 from datetime import datetime
 
@@ -20,21 +22,57 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION - 3 PROJECTS (15 BOTS TEST)
+# CONFIGURATION - 5 WORKERS (25 BOTS)
 # ============================================
-PROJECTS = []
-for i in range(1, 4):  # Sirf 3 projects (15 bots test)
-    PROJECTS.append({
-        "id": i,
-        "name": f"zoom-bot-{i}",
-        "url": f"https://zoom-bot-{i}.railway.app",
-        "replicas": 42,
-        "bots_per_replica": 5,
-        "total_bots": 5,  # Har project mein sirf 5 bots (test ke liye)
-        "status": "stopped"
-    })
+PROJECTS = [
+    {
+        "id": 1,
+        "name": "zoom-worker-1",
+        "url": "https://zoom-worker-production-9981.up.railway.app",
+        "bots_per_project": 5,
+        "total_bots": 5,
+        "status": "stopped",
+        "active_meeting": None
+    },
+    {
+        "id": 2,
+        "name": "zoom-worker-2",
+        "url": "https://zoom-worker-production-c2b3.up.railway.app",
+        "bots_per_project": 5,
+        "total_bots": 5,
+        "status": "stopped",
+        "active_meeting": None
+    },
+    {
+        "id": 3,
+        "name": "zoom-worker-3",
+        "url": "https://zoom-worker-production-fd51.up.railway.app",
+        "bots_per_project": 5,
+        "total_bots": 5,
+        "status": "stopped",
+        "active_meeting": None
+    },
+    {
+        "id": 4,
+        "name": "zoom-worker-4",
+        "url": "https://zoom-worker-production-ffd8.up.railway.app",
+        "bots_per_project": 5,
+        "total_bots": 5,
+        "status": "stopped",
+        "active_meeting": None
+    },
+    {
+        "id": 5,
+        "name": "zoom-worker-5",
+        "url": "https://zoom-worker-production-6d8d.up.railway.app",
+        "bots_per_project": 5,
+        "total_bots": 5,
+        "status": "stopped",
+        "active_meeting": None
+    }
+]
 
-TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 15 bots
+TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 25 bots
 
 # ============================================
 # INDIAN NAMES
@@ -91,17 +129,20 @@ class StartBotsRequest(BaseModel):
     duration_minutes: int = 10
     name_type: str = "indian"
     custom_names: Optional[List[str]] = None
-    projects: Optional[List[int]] = None
-    bot_count: Optional[int] = None  # Total bots across all projects
+    bot_count: Optional[int] = None
 
 class ToggleBillingRequest(BaseModel):
     enabled: bool
+
+class KillMeetingRequest(BaseModel):
+    meeting_code: str
 
 # ============================================
 # STATE
 # ============================================
 billing_enabled = True
 active_meetings = {}
+project_assignments = {}  # meeting_code -> list of project ids
 
 # ============================================
 # API ENDPOINTS
@@ -117,27 +158,31 @@ async def root():
 
 @app.post("/api/start-bots")
 async def start_bots(request: StartBotsRequest):
-    global billing_enabled, active_meetings
+    global billing_enabled, active_meetings, project_assignments
     
     if not billing_enabled:
-        raise HTTPException(status_code=403, detail="Billing is disabled")
+        raise HTTPException(status_code=403, detail="Billing is disabled. Enable billing first.")
     
-    projects_to_use = PROJECTS
-    if request.projects:
-        projects_to_use = [p for p in PROJECTS if p["id"] in request.projects]
+    # Calculate bots per project
+    total_bots_requested = request.bot_count or TOTAL_CAPACITY
+    available_projects = [p for p in PROJECTS if p["status"] == "stopped" or p["status"] == "idle"]
     
-    # Calculate bots per project (distribute evenly)
-    total_bots_requested = request.bot_count or sum(p["total_bots"] for p in projects_to_use)
-    bots_per_project = max(1, total_bots_requested // len(projects_to_use))
+    if not available_projects:
+        raise HTTPException(status_code=400, detail="No available projects. All are busy.")
     
-    # Generate names
-    total_bots = len(projects_to_use) * bots_per_project
-    names = generate_names(request.name_type, request.custom_names, total_bots)
+    # Distribute bots evenly
+    bots_per_project = max(1, total_bots_requested // len(available_projects))
+    if bots_per_project > 5:
+        bots_per_project = 5
+    
+    total_bots_to_start = len(available_projects) * bots_per_project
+    names = generate_names(request.name_type, request.custom_names, total_bots_to_start)
     
     results = []
     name_index = 0
+    assigned_projects = []
     
-    for project in projects_to_use:
+    for project in available_projects:
         try:
             project_names = names[name_index:name_index + bots_per_project]
             name_index += bots_per_project
@@ -148,54 +193,56 @@ async def start_bots(request: StartBotsRequest):
                     json={
                         "meeting_code": request.meeting_code,
                         "passcode": request.passcode,
-                        "bot_count": min(bots_per_project, 5),  # Max 5 per project
-                        "duration_minutes": request.duration_minutes,
-                        "names": project_names[:5]
+                        "bot_count": bots_per_project,
+                        "duration_minutes": request.duration_minutes
                     }
                 )
                 
                 if response.status_code == 200:
                     project["status"] = "running"
+                    project["active_meeting"] = request.meeting_code
+                    assigned_projects.append(project["id"])
                     results.append({
-                        "project": project["name"], 
-                        "status": "success", 
+                        "project": project["name"],
+                        "status": "success",
                         "bots": bots_per_project
                     })
                 else:
                     results.append({
-                        "project": project["name"], 
+                        "project": project["name"],
                         "status": "failed",
                         "error": response.text
                     })
         except Exception as e:
             results.append({
-                "project": project["name"], 
-                "status": "failed", 
+                "project": project["name"],
+                "status": "failed",
                 "error": str(e)
             })
     
+    # Track meeting
     if request.meeting_code not in active_meetings:
         active_meetings[request.meeting_code] = {
             "meeting_code": request.meeting_code,
             "started_at": datetime.now().isoformat(),
-            "total_bots": total_bots,
-            "projects": projects_to_use,
+            "total_bots": total_bots_to_start,
+            "projects": assigned_projects,
             "status": "running"
         }
+        project_assignments[request.meeting_code] = assigned_projects
     
     return {
         "success": True,
-        "message": f"Started {total_bots} bots across {len(results)} projects",
-        "total_bots": total_bots,
+        "message": f"Started {total_bots_to_start} bots across {len(results)} projects",
+        "total_bots": total_bots_to_start,
         "results": results
     }
 
 @app.post("/api/kill-meeting")
-async def kill_meeting(request: dict):
-    """Kill all bots in a meeting"""
-    meeting_code = request.get("meeting_code")
-    if not meeting_code:
-        raise HTTPException(status_code=400, detail="meeting_code required")
+async def kill_meeting(request: KillMeetingRequest):
+    global active_meetings, project_assignments
+    
+    meeting_code = request.meeting_code
     
     if meeting_code not in active_meetings:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -203,20 +250,35 @@ async def kill_meeting(request: dict):
     meeting = active_meetings[meeting_code]
     results = []
     
-    for project in meeting["projects"]:
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                response = await client.post(
-                    f"{project['url']}/api/stop-bots",
-                    json={"meeting_code": meeting_code}
-                )
-                project["status"] = "stopped"
-                results.append({"project": project["name"], "status": "stopped"})
-        except Exception as e:
-            results.append({"project": project["name"], "status": "failed", "error": str(e)})
+    # Stop bots on assigned projects
+    for project_id in meeting["projects"]:
+        project = next((p for p in PROJECTS if p["id"] == project_id), None)
+        if project:
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    response = await client.post(
+                        f"{project['url']}/api/stop-bots",
+                        json={"meeting_code": meeting_code}
+                    )
+                    project["status"] = "stopped"
+                    project["active_meeting"] = None
+                    results.append({
+                        "project": project["name"],
+                        "status": "stopped"
+                    })
+            except Exception as e:
+                results.append({
+                    "project": project["name"],
+                    "status": "failed",
+                    "error": str(e)
+                })
     
     meeting["status"] = "killed"
     meeting["killed_at"] = datetime.now().isoformat()
+    
+    # Clean up assignments
+    if meeting_code in project_assignments:
+        del project_assignments[meeting_code]
     
     return {
         "success": True,
@@ -227,17 +289,32 @@ async def kill_meeting(request: dict):
 @app.post("/api/toggle-billing")
 async def toggle_billing(request: ToggleBillingRequest):
     global billing_enabled
+    
     billing_enabled = request.enabled
     
     if not billing_enabled:
-        for meeting_code, meeting in active_meetings.items():
+        # Kill all active meetings
+        for meeting_code, meeting in list(active_meetings.items()):
             if meeting["status"] == "running":
+                for project_id in meeting["projects"]:
+                    project = next((p for p in PROJECTS if p["id"] == project_id), None)
+                    if project:
+                        try:
+                            async with httpx.AsyncClient(timeout=5) as client:
+                                await client.post(
+                                    f"{project['url']}/api/stop-bots",
+                                    json={"meeting_code": meeting_code}
+                                )
+                                project["status"] = "stopped"
+                                project["active_meeting"] = None
+                        except:
+                            pass
                 meeting["status"] = "paused"
     
     return {
         "success": True,
         "billing_enabled": billing_enabled,
-        "status": "Active" if billing_enabled else "Paused"
+        "status": "Active" if billing_enabled else "Paused (All bots stopped)"
     }
 
 @app.get("/api/status")
@@ -250,18 +327,34 @@ async def get_status():
         if p["status"] == "running":
             running_bots += p["total_bots"]
     
+    # Clean up stale meetings
+    current_meetings = {}
+    for code, meeting in active_meetings.items():
+        # Check if any project is still running for this meeting
+        still_running = False
+        for project_id in meeting["projects"]:
+            project = next((p for p in PROJECTS if p["id"] == project_id), None)
+            if project and project["status"] == "running" and project["active_meeting"] == code:
+                still_running = True
+                break
+        if still_running:
+            current_meetings[code] = meeting
+    
     return {
         "billing_enabled": billing_enabled,
-        "active_meetings": active_meetings,
+        "active_meetings": current_meetings,
         "total_bots": total_bots,
         "running_bots": running_bots,
+        "available_bots": total_bots - running_bots,
         "projects": [
             {
-                "name": p["name"], 
-                "status": p["status"], 
+                "id": p["id"],
+                "name": p["name"],
+                "status": p["status"],
                 "total_bots": p["total_bots"],
-                "url": p["url"]
-            } 
+                "url": p["url"],
+                "active_meeting": p["active_meeting"]
+            }
             for p in PROJECTS
         ]
     }
@@ -271,7 +364,8 @@ async def health():
     return {
         "online": True,
         "capacity": TOTAL_CAPACITY,
-        "projects": len(PROJECTS)
+        "projects": len(PROJECTS),
+        "active_meetings": len(active_meetings)
     }
 
 if __name__ == "__main__":
