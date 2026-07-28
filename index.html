@@ -19,7 +19,8 @@
             <span class="badge">Pro</span>
         </div>
         <div class="header-right">
-            <span class="usage">Usage: <strong id="usageCount">0/6000</strong></span>
+            <span class="usage">Usage: <strong id="usageCount">0/25</strong></span>
+            <span class="usage" id="availableCount" style="color:#00ff64;">Available: 25</span>
             <button class="btn-new-ui" onclick="refreshStatus()">🔄 Refresh</button>
         </div>
     </header>
@@ -50,11 +51,11 @@
                 <div class="meeting-row two-col">
                     <div class="form-group">
                         <label>Members (Bots)</label>
-                        <input type="number" id="botCount" value="20" class="input-field" min="1" max="1000" />
+                        <input type="number" id="botCount" value="25" class="input-field" min="1" max="1000" />
                     </div>
                     <div class="form-group">
                         <label>Timeout (seconds)</label>
-                        <input type="number" id="timeout" value="11000" class="input-field" min="60" />
+                        <input type="number" id="timeout" value="600" class="input-field" min="60" />
                     </div>
                 </div>
 
@@ -87,7 +88,7 @@
 
                 <div class="action-row">
                     <button class="btn btn-primary" onclick="startBots()">🚀 Start</button>
-                    <button class="btn btn-danger" onclick="killMeeting()">⏹️ Stop</button>
+                    <button class="btn btn-danger" onclick="killMeeting()">⏹️ Kill Meeting</button>
                 </div>
 
                 <div class="status-bar" id="statusBar">
@@ -109,7 +110,19 @@
         <div class="right-column">
 
             <!-- ========================================== -->
-            <!-- BILLING TOGGLE - MAIN CONTROL -->
+            <!-- ACTIVE MEETING STATUS -->
+            <!-- ========================================== -->
+            <div class="card" style="border-color: rgba(0,210,255,0.3);">
+                <h2>📌 Active Meeting Status</h2>
+                <div id="activeMeetingDisplay">
+                    <div style="text-align:center;padding:15px;color:rgba(255,255,255,0.3);">
+                        No active meeting
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================== -->
+            <!-- BILLING TOGGLE -->
             <!-- ========================================== -->
             <div class="card" style="border-color: rgba(122,92,255,0.3);">
                 <h2>⚡ System Control</h2>
@@ -135,7 +148,7 @@
             <div class="card">
                 <h2>📋 Previous Tasks</h2>
                 <div style="display:flex;gap:10px;margin-bottom:12px;">
-                    <input type="date" id="filterDate" value="2026-07-28" class="input-field" />
+                    <input type="date" id="filterDate" value="2026-07-29" class="input-field" />
                     <button class="btn btn-secondary" onclick="filterTasks()">🔍 Filter</button>
                 </div>
                 <table class="task-table">
@@ -188,7 +201,7 @@
 // ============================================
 // API CONFIG
 // ============================================
-const API_URL = 'http://localhost:8000';
+const API_URL = 'https://zoom-master-system-production.up.railway.app';
 
 // ============================================
 // TOGGLE CUSTOM NAMES
@@ -215,7 +228,7 @@ function applyCustomNames() {
 }
 
 // ============================================
-// BILLING TOGGLE - MAIN FUNCTION
+// BILLING TOGGLE
 // ============================================
 async function toggleBilling() {
     const toggle = document.getElementById('billingToggle');
@@ -258,13 +271,11 @@ async function toggleBilling() {
             }
             updateStats();
         } else {
-            // Revert toggle if API fails
             toggle.checked = !isActive;
             statusBar.innerHTML = `❌ Failed to toggle billing: ${data.detail || 'Unknown error'}`;
             statusBar.className = 'status-bar error';
         }
     } catch(e) {
-        // Revert toggle if API fails
         toggle.checked = !isActive;
         statusBar.innerHTML = `❌ Error: ${e.message}`;
         statusBar.className = 'status-bar error';
@@ -278,7 +289,6 @@ async function startBots() {
     const statusBar = document.getElementById('statusBar');
     const billingToggle = document.getElementById('billingToggle');
 
-    // Check if billing is enabled
     if (!billingToggle.checked) {
         statusBar.innerHTML = '❌ System is PAUSED. Turn ON billing first!';
         statusBar.className = 'status-bar error';
@@ -288,8 +298,8 @@ async function startBots() {
 
     const meetingId = document.getElementById('meetingId').value;
     const passcode = document.getElementById('passcode').value;
-    const botCount = parseInt(document.getElementById('botCount').value) || 20;
-    const timeout = parseInt(document.getElementById('timeout').value) || 11000;
+    const botCount = parseInt(document.getElementById('botCount').value) || 25;
+    const timeout = parseInt(document.getElementById('timeout').value) || 600;
     const nameType = document.getElementById('nameType').value;
     const customNames = document.getElementById('customNames').value.split('\n').filter(n => n.trim());
 
@@ -313,9 +323,9 @@ async function startBots() {
         const data = await response.json();
 
         if (data.success) {
-            statusBar.innerHTML = `✅ ${data.message} (${data.total_bots || botCount} bots)`;
+            statusBar.innerHTML = `✅ ${data.message} (${data.total_bots} bots)`;
             statusBar.className = 'status-bar success';
-            addLog(`✅ Started ${botCount} bots for meeting ${meetingId}`);
+            addLog(`✅ Started ${data.total_bots} bots for meeting ${meetingId}`);
             updateStats();
         } else {
             statusBar.innerHTML = `❌ Failed: ${data.detail || 'Unknown error'}`;
@@ -382,10 +392,108 @@ async function updateStats() {
     try {
         const response = await fetch(`${API_URL}/api/status`);
         const data = await response.json();
+        
         const totalBots = data.total_bots || 0;
-        document.getElementById('usageCount').textContent = `${totalBots}/6000`;
+        const runningBots = data.running_bots || 0;
+        const availableBots = data.available_bots || 0;
+        
+        document.getElementById('usageCount').textContent = `${runningBots}/${totalBots}`;
+        document.getElementById('availableCount').textContent = `Available: ${availableBots}`;
+        
+        // Update active meeting display
+        const activeMeetingDiv = document.getElementById('activeMeetingDisplay');
+        const meetings = data.active_meetings || {};
+        const meetingKeys = Object.keys(meetings);
+        
+        if (meetingKeys.length > 0) {
+            let html = '';
+            for (const code of meetingKeys) {
+                const meeting = meetings[code];
+                html += `
+                    <div style="background:rgba(0,210,255,0.05);border:1px solid rgba(0,210,255,0.1);border-radius:8px;padding:12px;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <strong style="color:#00d2ff;">📌 ${code}</strong>
+                                <span style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:12px;">
+                                    ${meeting.total_bots || 0} bots
+                                </span>
+                            </div>
+                            <span style="font-size:11px;color:#00ff64;background:rgba(0,255,100,0.1);padding:2px 10px;border-radius:12px;">
+                                🟢 ${meeting.status || 'running'}
+                            </span>
+                        </div>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">
+                            Started: ${new Date(meeting.started_at).toLocaleString()}
+                        </div>
+                    </div>
+                `;
+            }
+            activeMeetingDiv.innerHTML = html;
+        } else {
+            activeMeetingDiv.innerHTML = `
+                <div style="text-align:center;padding:15px;color:rgba(255,255,255,0.3);">
+                    No active meeting
+                </div>
+            `;
+        }
+        
+        // Update previous tasks table
+        const taskBody = document.getElementById('prevTaskTableBody');
+        if (meetingKeys.length > 0) {
+            let html = '';
+            for (const code of meetingKeys) {
+                const meeting = meetings[code];
+                html += `
+                    <tr>
+                        <td>${code}</td>
+                        <td>${meeting.total_bots || 0}</td>
+                        <td><span style="color:#00d2ff;">${meeting.status || 'running'}</span></td>
+                        <td>
+                            <button class="btn-action" onclick="killSpecificMeeting('${code}')" style="background:rgba(255,68,68,0.1);border:none;color:#ff4444;padding:4px 10px;border-radius:4px;cursor:pointer;">
+                                🗑️ Kill
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }
+            taskBody.innerHTML = html;
+        } else {
+            taskBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="no-tasks">No active meetings</td>
+                </tr>
+            `;
+        }
+        
     } catch(e) {
-        // Silent fail
+        console.error('Status update failed:', e);
+    }
+}
+
+// ============================================
+// KILL SPECIFIC MEETING FROM TABLE
+// ============================================
+async function killSpecificMeeting(meetingCode) {
+    if (!confirm(`Kill all bots in meeting ${meetingCode}?`)) return;
+    
+    const statusBar = document.getElementById('statusBar');
+    statusBar.innerHTML = `⏳ Killing meeting ${meetingCode}...`;
+    statusBar.className = 'status-bar running';
+
+    try {
+        const response = await fetch(`${API_URL}/api/kill-meeting`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meeting_code: meetingCode })
+        });
+        const data = await response.json();
+        statusBar.innerHTML = `✅ ${data.message}`;
+        statusBar.className = 'status-bar success';
+        addLog(`🛑 Killed meeting ${meetingCode}`);
+        updateStats();
+    } catch(e) {
+        statusBar.innerHTML = `❌ ${e.message}`;
+        statusBar.className = 'status-bar error';
     }
 }
 
@@ -435,6 +543,7 @@ setInterval(updateStats, 5000);
 // INIT
 // ============================================
 toggleCustomNames();
+updateStats();
 </script>
 
 </body>
