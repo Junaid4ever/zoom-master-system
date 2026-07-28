@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zoom Bot - Dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="dashboard">
+
+    <!-- ========================================== -->
+    <!-- HEADER -->
+    <!-- ========================================== -->
+    <header class="header">
+        <div class="header-left">
+            <h1>🚀 ZOOM</h1>
+            <span class="badge">Pro</span>
+        </div>
+        <div class="header-right">
+            <span class="usage">Usage: <strong id="usageCount">0/6000</strong></span>
+            <button class="btn-new-ui" onclick="refreshStatus()">🔄 Refresh</button>
+        </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- MAIN -->
+    <!-- ========================================== -->
+    <main class="main">
+
+        <!-- LEFT COLUMN -->
+        <div class="left-column">
+
+            <!-- MEETING CONTROLS -->
+            <div class="card">
+                <h2>📌 Meeting Controls</h2>
+
+                <div class="meeting-row two-col">
+                    <div class="form-group">
+                        <label>Meeting ID</label>
+                        <input type="text" id="meetingId" value="5415403058" class="input-field" />
+                    </div>
+                    <div class="form-group">
+                        <label>Meeting Password</label>
+                        <input type="text" id="passcode" value="850893" class="input-field" />
+                    </div>
+                </div>
+
+                <div class="meeting-row two-col">
+                    <div class="form-group">
+                        <label>Members (Bots)</label>
+                        <input type="number" id="botCount" value="20" class="input-field" min="1" max="1000" />
+                    </div>
+                    <div class="form-group">
+                        <label>Timeout (seconds)</label>
+                        <input type="number" id="timeout" value="11000" class="input-field" min="60" />
+                    </div>
+                </div>
+
+                <div class="meeting-row two-col">
+                    <div class="form-group">
+                        <label>Name Type</label>
+                        <select id="nameType" class="input-field" onchange="toggleCustomNames()">
+                            <option value="indian">🇮🇳 Indian</option>
+                            <option value="english">🇺🇸 English</option>
+                            <option value="custom">✏️ Custom</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>React</label>
+                        <select id="reactType" class="input-field">
+                            <option value="OFF">OFF</option>
+                            <option value="ON">ON</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- CUSTOM NAMES DROPDOWN -->
+                <div id="customNamesGroup" style="display:none; margin-top:10px;">
+                    <div class="form-group">
+                        <label>Custom Names (one per line)</label>
+                        <textarea id="customNames" rows="3" class="input-field" placeholder="Amit Sharma&#10;Priya Singh&#10;Rahul Kumar" style="resize:vertical;font-family:monospace;"></textarea>
+                    </div>
+                    <button class="btn btn-secondary" onclick="applyCustomNames()" style="margin-top:6px;">➕ Apply Custom Names</button>
+                </div>
+
+                <div class="action-row">
+                    <button class="btn btn-primary" onclick="startBots()">🚀 Start</button>
+                    <button class="btn btn-danger" onclick="killMeeting()">⏹️ Stop</button>
+                </div>
+
+                <div class="status-bar" id="statusBar">
+                    ✅ Ready to start bots...
+                </div>
+            </div>
+
+            <!-- LIVE LOGS -->
+            <div class="card">
+                <h2>📊 Live Logs</h2>
+                <div id="logsContainer">
+                    <div class="log-placeholder">No active meetings</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN -->
+        <div class="right-column">
+
+            <!-- ========================================== -->
+            <!-- BILLING TOGGLE - MAIN CONTROL -->
+            <!-- ========================================== -->
+            <div class="card" style="border-color: rgba(122,92,255,0.3);">
+                <h2>⚡ System Control</h2>
+                <div class="billing-toggle-container">
+                    <div style="display:flex;align-items:center;gap:14px;">
+                        <span style="font-weight:600;font-size:15px;">Billing / System</span>
+                        <label class="toggle-switch large-toggle">
+                            <input type="checkbox" id="billingToggle" checked onchange="toggleBilling()" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span id="billingLabel" style="font-weight:600;color:#00ff64;font-size:14px;">🟢 ACTIVE</span>
+                    </div>
+                    <span style="font-size:12px;color:rgba(255,255,255,0.3);">
+                        Turn OFF to stop all bots & hold resources. Turn ON to resume.
+                    </span>
+                </div>
+                <div id="billingStatusDetail" style="margin-top:8px;padding:8px 12px;background:rgba(0,255,100,0.05);border-radius:6px;font-size:12px;color:#00ff64;border:1px solid rgba(0,255,100,0.1);">
+                    ✅ System is ACTIVE. Bots can be started.
+                </div>
+            </div>
+
+            <!-- PREVIOUS TASKS -->
+            <div class="card">
+                <h2>📋 Previous Tasks</h2>
+                <div style="display:flex;gap:10px;margin-bottom:12px;">
+                    <input type="date" id="filterDate" value="2026-07-28" class="input-field" />
+                    <button class="btn btn-secondary" onclick="filterTasks()">🔍 Filter</button>
+                </div>
+                <table class="task-table">
+                    <thead>
+                        <tr>
+                            <th>Meet ID</th>
+                            <th>Members</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="prevTaskTableBody">
+                        <tr>
+                            <td colspan="4" class="no-tasks">No completed/failed tasks for this date</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- REACTION CONTROLS -->
+            <div class="card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span><strong>🎭 Floating Emoji Reactions</strong></span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="emojiReactions" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                    <span><strong>👥 Participant Reactions</strong></span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="participantReactions" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- SUBMIT / CANCEL -->
+            <div class="card" style="display:flex;gap:12px;">
+                <button class="btn btn-primary" style="flex:1;" onclick="submitAll()">✅ SUBMIT</button>
+                <button class="btn btn-danger" style="flex:1;" onclick="cancelAll()">❌ CANCEL</button>
+            </div>
+
+        </div>
+
+    </main>
+</div>
+
+<script>
+// ============================================
+// API CONFIG
+// ============================================
+const API_URL = 'http://localhost:8000';
+
+// ============================================
+// TOGGLE CUSTOM NAMES
+// ============================================
+function toggleCustomNames() {
+    const nameType = document.getElementById('nameType').value;
+    const customGroup = document.getElementById('customNamesGroup');
+    customGroup.style.display = nameType === 'custom' ? 'block' : 'none';
+}
+
+// ============================================
+// APPLY CUSTOM NAMES
+// ============================================
+function applyCustomNames() {
+    const names = document.getElementById('customNames').value.split('\n').filter(n => n.trim());
+    if (names.length === 0) {
+        alert('Please enter at least one name');
+        return;
+    }
+    document.getElementById('nameType').value = 'custom';
+    addLog(`📝 Applied ${names.length} custom names`);
+    document.getElementById('statusBar').innerHTML = `✅ Applied ${names.length} custom names`;
+    document.getElementById('statusBar').className = 'status-bar success';
+}
+
+// ============================================
+// BILLING TOGGLE - MAIN FUNCTION
+// ============================================
+async function toggleBilling() {
+    const toggle = document.getElementById('billingToggle');
+    const isActive = toggle.checked;
+    const statusBar = document.getElementById('statusBar');
+    const billingLabel = document.getElementById('billingLabel');
+    const billingStatusDetail = document.getElementById('billingStatusDetail');
+
+    statusBar.innerHTML = isActive ? '⏳ Activating system...' : '⏳ Stopping all bots & holding resources...';
+    statusBar.className = 'status-bar running';
+
+    try {
+        const response = await fetch(`${API_URL}/api/toggle-billing`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: isActive })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            if (isActive) {
+                billingLabel.textContent = '🟢 ACTIVE';
+                billingLabel.style.color = '#00ff64';
+                billingStatusDetail.innerHTML = '✅ System is ACTIVE. Bots can be started.';
+                billingStatusDetail.style.color = '#00ff64';
+                billingStatusDetail.style.borderColor = 'rgba(0,255,100,0.1)';
+                statusBar.innerHTML = '✅ System activated! Ready to start bots.';
+                statusBar.className = 'status-bar success';
+                addLog('🟢 Billing ENABLED - System active');
+            } else {
+                billingLabel.textContent = '🔴 PAUSED';
+                billingLabel.style.color = '#ff4444';
+                billingStatusDetail.innerHTML = '⏸️ System is PAUSED. All bots stopped. Resources held.';
+                billingStatusDetail.style.color = '#ff4444';
+                billingStatusDetail.style.borderColor = 'rgba(255,68,68,0.1)';
+                statusBar.innerHTML = '⏸️ System paused. All bots stopped. Turn ON to resume.';
+                statusBar.className = 'status-bar error';
+                addLog('🔴 Billing DISABLED - All bots stopped');
+            }
+            updateStats();
+        } else {
+            // Revert toggle if API fails
+            toggle.checked = !isActive;
+            statusBar.innerHTML = `❌ Failed to toggle billing: ${data.detail || 'Unknown error'}`;
+            statusBar.className = 'status-bar error';
+        }
+    } catch(e) {
+        // Revert toggle if API fails
+        toggle.checked = !isActive;
+        statusBar.innerHTML = `❌ Error: ${e.message}`;
+        statusBar.className = 'status-bar error';
+    }
+}
+
+// ============================================
+// START BOTS
+// ============================================
+async function startBots() {
+    const statusBar = document.getElementById('statusBar');
+    const billingToggle = document.getElementById('billingToggle');
+
+    // Check if billing is enabled
+    if (!billingToggle.checked) {
+        statusBar.innerHTML = '❌ System is PAUSED. Turn ON billing first!';
+        statusBar.className = 'status-bar error';
+        addLog('❌ Cannot start bots - System is paused');
+        return;
+    }
+
+    const meetingId = document.getElementById('meetingId').value;
+    const passcode = document.getElementById('passcode').value;
+    const botCount = parseInt(document.getElementById('botCount').value) || 20;
+    const timeout = parseInt(document.getElementById('timeout').value) || 11000;
+    const nameType = document.getElementById('nameType').value;
+    const customNames = document.getElementById('customNames').value.split('\n').filter(n => n.trim());
+
+    statusBar.innerHTML = '⏳ Starting bots...';
+    statusBar.className = 'status-bar running';
+
+    try {
+        const response = await fetch(`${API_URL}/api/start-bots`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                meeting_code: meetingId,
+                passcode: passcode,
+                bot_count: botCount,
+                duration_minutes: Math.ceil(timeout / 60),
+                name_type: nameType,
+                custom_names: customNames.length > 0 ? customNames : undefined
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            statusBar.innerHTML = `✅ ${data.message} (${data.total_bots || botCount} bots)`;
+            statusBar.className = 'status-bar success';
+            addLog(`✅ Started ${botCount} bots for meeting ${meetingId}`);
+            updateStats();
+        } else {
+            statusBar.innerHTML = `❌ Failed: ${data.detail || 'Unknown error'}`;
+            statusBar.className = 'status-bar error';
+        }
+    } catch(e) {
+        statusBar.innerHTML = `❌ Error: ${e.message}`;
+        statusBar.className = 'status-bar error';
+    }
+}
+
+// ============================================
+// KILL MEETING
+// ============================================
+async function killMeeting() {
+    const meetingId = document.getElementById('meetingId').value;
+    const statusBar = document.getElementById('statusBar');
+
+    if (!confirm(`Kill all bots in meeting ${meetingId}?`)) return;
+
+    statusBar.innerHTML = '⏳ Killing meeting...';
+    statusBar.className = 'status-bar running';
+
+    try {
+        const response = await fetch(`${API_URL}/api/kill-meeting`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meeting_code: meetingId })
+        });
+        const data = await response.json();
+        statusBar.innerHTML = `✅ ${data.message}`;
+        statusBar.className = 'status-bar success';
+        addLog(`🛑 Killed meeting ${meetingId}`);
+        updateStats();
+    } catch(e) {
+        statusBar.innerHTML = `❌ ${e.message}`;
+        statusBar.className = 'status-bar error';
+    }
+}
+
+// ============================================
+// ADD LOG
+// ============================================
+function addLog(message) {
+    const container = document.getElementById('logsContainer');
+    const placeholder = container.querySelector('.log-placeholder');
+    if (placeholder) placeholder.remove();
+
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    const timestamp = new Date().toLocaleTimeString();
+    div.innerHTML = `<span class="time">[${timestamp}]</span> ${message}`;
+    container.prepend(div);
+
+    while (container.children.length > 50) {
+        container.removeChild(container.lastChild);
+    }
+}
+
+// ============================================
+// UPDATE STATS
+// ============================================
+async function updateStats() {
+    try {
+        const response = await fetch(`${API_URL}/api/status`);
+        const data = await response.json();
+        const totalBots = data.total_bots || 0;
+        document.getElementById('usageCount').textContent = `${totalBots}/6000`;
+    } catch(e) {
+        // Silent fail
+    }
+}
+
+// ============================================
+// REFRESH
+// ============================================
+function refreshStatus() {
+    updateStats();
+    document.getElementById('statusBar').innerHTML = '🔄 Refreshed!';
+    document.getElementById('statusBar').className = 'status-bar';
+    setTimeout(() => {
+        document.getElementById('statusBar').innerHTML = '✅ Ready to start bots...';
+        document.getElementById('statusBar').className = 'status-bar';
+    }, 1000);
+    addLog('🔄 Status refreshed');
+}
+
+// ============================================
+// FILTER TASKS
+// ============================================
+function filterTasks() {
+    const date = document.getElementById('filterDate').value;
+    addLog(`🔍 Filtered tasks for ${date}`);
+}
+
+// ============================================
+// SUBMIT / CANCEL
+// ============================================
+function submitAll() {
+    addLog('✅ All settings submitted');
+    document.getElementById('statusBar').innerHTML = '✅ All settings submitted successfully!';
+    document.getElementById('statusBar').className = 'status-bar success';
+}
+
+function cancelAll() {
+    addLog('❌ All settings cancelled');
+    document.getElementById('statusBar').innerHTML = '❌ Cancelled all operations';
+    document.getElementById('statusBar').className = 'status-bar error';
+}
+
+// ============================================
+// AUTO REFRESH
+// ============================================
+setInterval(updateStats, 5000);
+
+// ============================================
+// INIT
+// ============================================
+toggleCustomNames();
+</script>
+
+</body>
+</html>
