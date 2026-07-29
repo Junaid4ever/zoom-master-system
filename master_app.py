@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import httpx
@@ -32,7 +31,8 @@ PROJECTS = [
         "bots_per_project": 5,
         "total_bots": 5,
         "status": "stopped",
-        "active_meeting": None
+        "active_meeting": None,
+        "used_bots": 0
     },
     {
         "id": 2,
@@ -41,7 +41,8 @@ PROJECTS = [
         "bots_per_project": 5,
         "total_bots": 5,
         "status": "stopped",
-        "active_meeting": None
+        "active_meeting": None,
+        "used_bots": 0
     },
     {
         "id": 3,
@@ -50,7 +51,8 @@ PROJECTS = [
         "bots_per_project": 5,
         "total_bots": 5,
         "status": "stopped",
-        "active_meeting": None
+        "active_meeting": None,
+        "used_bots": 0
     },
     {
         "id": 4,
@@ -59,7 +61,8 @@ PROJECTS = [
         "bots_per_project": 5,
         "total_bots": 5,
         "status": "stopped",
-        "active_meeting": None
+        "active_meeting": None,
+        "used_bots": 0
     },
     {
         "id": 5,
@@ -68,57 +71,12 @@ PROJECTS = [
         "bots_per_project": 5,
         "total_bots": 5,
         "status": "stopped",
-        "active_meeting": None
+        "active_meeting": None,
+        "used_bots": 0
     }
 ]
 
-TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 25 bots
-
-# ============================================
-# INDIAN NAMES
-# ============================================
-INDIAN_FIRST_NAMES = [
-    'Aarav', 'Vivaan', 'Aditya', 'Vihaan', 'Arjun', 'Reyansh', 'Ayaan', 
-    'Krishna', 'Ishaan', 'Shaurya', 'Rahul', 'Rohan', 'Priya', 'Ananya',
-    'Diya', 'Saanvi', 'Aadhya', 'Kavya', 'Riya', 'Anika', 'Amit', 'Rajesh',
-    'Sneha', 'Pooja', 'Neha', 'Vikram', 'Karan', 'Manish', 'Suresh', 'Deepak'
-]
-
-INDIAN_LAST_NAMES = [
-    'Sharma', 'Verma', 'Patel', 'Kumar', 'Singh', 'Reddy', 'Gupta', 'Joshi',
-    'Malhotra', 'Mehta', 'Chopra', 'Khanna', 'Agarwal', 'Jain', 'Saxena',
-    'Bansal', 'Srivastava', 'Mishra', 'Pandey', 'Rao', 'Desai', 'Nair'
-]
-
-ENGLISH_FIRST_NAMES = [
-    'James', 'John', 'Robert', 'Michael', 'William', 'David', 'Richard', 'Joseph',
-    'Thomas', 'Charles', 'Christopher', 'Daniel', 'Matthew', 'Anthony', 'Donald'
-]
-
-ENGLISH_LAST_NAMES = [
-    'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
-    'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Wilson', 'Anderson', 'Thomas'
-]
-
-def generate_names(name_type, custom_names=None, count=1):
-    names = []
-    if name_type == "indian":
-        for _ in range(count):
-            first = random.choice(INDIAN_FIRST_NAMES)
-            last = random.choice(INDIAN_LAST_NAMES)
-            names.append(f"{first} {last}")
-    elif name_type == "english":
-        for _ in range(count):
-            first = random.choice(ENGLISH_FIRST_NAMES)
-            last = random.choice(ENGLISH_LAST_NAMES)
-            names.append(f"{first} {last}")
-    elif name_type == "custom" and custom_names:
-        names = custom_names[:count]
-        while len(names) < count:
-            first = random.choice(INDIAN_FIRST_NAMES)
-            last = random.choice(INDIAN_LAST_NAMES)
-            names.append(f"{first} {last}")
-    return names[:count]
+TOTAL_CAPACITY = 25
 
 # ============================================
 # MODELS
@@ -129,12 +87,12 @@ class StartBotsRequest(BaseModel):
     duration_minutes: int = 10
     name_type: str = "indian"
     custom_names: Optional[List[str]] = None
-    bot_count: Optional[int] = None
+    bot_count: int = 5
 
 class ToggleBillingRequest(BaseModel):
     enabled: bool
 
-class KillMeetingRequest(BaseModel):
+class StopBotsRequest(BaseModel):
     meeting_code: str
 
 # ============================================
@@ -142,7 +100,7 @@ class KillMeetingRequest(BaseModel):
 # ============================================
 billing_enabled = True
 active_meetings = {}
-project_assignments = {}  # meeting_code -> list of project ids
+meeting_workers = {}
 
 # ============================================
 # API ENDPOINTS
@@ -158,54 +116,60 @@ async def root():
 
 @app.post("/api/start-bots")
 async def start_bots(request: StartBotsRequest):
-    global billing_enabled, active_meetings, project_assignments
+    global billing_enabled, active_meetings, meeting_workers
     
     if not billing_enabled:
         raise HTTPException(status_code=403, detail="Billing is disabled. Enable billing first.")
     
-    # Calculate bots per project
-    total_bots_requested = request.bot_count or TOTAL_CAPACITY
-    available_projects = [p for p in PROJECTS if p["status"] == "stopped" or p["status"] == "idle"]
+    # Calculate total bots requested
+    total_bots_requested = request.bot_count
+    if total_bots_requested > TOTAL_CAPACITY:
+        raise HTTPException(status_code=400, detail=f"Requested {total_bots_requested} bots, but capacity is {TOTAL_CAPACITY}")
     
+    # Find available projects
+    available_projects = [p for p in PROJECTS if p["status"] != "running"]
     if not available_projects:
         raise HTTPException(status_code=400, detail="No available projects. All are busy.")
     
     # Distribute bots evenly
     bots_per_project = max(1, total_bots_requested // len(available_projects))
-    if bots_per_project > 5:
-        bots_per_project = 5
-    
-    total_bots_to_start = len(available_projects) * bots_per_project
-    names = generate_names(request.name_type, request.custom_names, total_bots_to_start)
+    remaining = total_bots_requested % len(available_projects)
     
     results = []
-    name_index = 0
     assigned_projects = []
+    total_started = 0
     
-    for project in available_projects:
+    for idx, project in enumerate(available_projects):
+        count = bots_per_project + (1 if idx < remaining else 0)
+        if count <= 0:
+            continue
+        
         try:
-            project_names = names[name_index:name_index + bots_per_project]
-            name_index += bots_per_project
-            
             async with httpx.AsyncClient(timeout=30) as client:
+                # Get names for this project
+                name_count = count
                 response = await client.post(
                     f"{project['url']}/api/start-bots",
                     json={
                         "meeting_code": request.meeting_code,
                         "passcode": request.passcode,
-                        "bot_count": bots_per_project,
-                        "duration_minutes": request.duration_minutes
+                        "bot_count": count,
+                        "duration_minutes": request.duration_minutes,
+                        "name_type": request.name_type,
+                        "custom_names": request.custom_names[:count] if request.custom_names else None
                     }
                 )
                 
                 if response.status_code == 200:
                     project["status"] = "running"
                     project["active_meeting"] = request.meeting_code
+                    project["used_bots"] = count
                     assigned_projects.append(project["id"])
+                    total_started += count
                     results.append({
                         "project": project["name"],
                         "status": "success",
-                        "bots": bots_per_project
+                        "bots": count
                     })
                 else:
                     results.append({
@@ -225,22 +189,28 @@ async def start_bots(request: StartBotsRequest):
         active_meetings[request.meeting_code] = {
             "meeting_code": request.meeting_code,
             "started_at": datetime.now().isoformat(),
-            "total_bots": total_bots_to_start,
+            "total_bots": total_started,
+            "bots": total_started,
             "projects": assigned_projects,
+            "duration": request.duration_minutes,
             "status": "running"
         }
-        project_assignments[request.meeting_code] = assigned_projects
+        meeting_workers[request.meeting_code] = assigned_projects
+    else:
+        active_meetings[request.meeting_code]["status"] = "running"
+        active_meetings[request.meeting_code]["total_bots"] = total_started
     
     return {
         "success": True,
-        "message": f"Started {total_bots_to_start} bots across {len(results)} projects",
-        "total_bots": total_bots_to_start,
+        "message": f"Started {total_started} bots across {len(results)} projects",
+        "total_bots": total_started,
         "results": results
     }
 
-@app.post("/api/kill-meeting")
-async def kill_meeting(request: KillMeetingRequest):
-    global active_meetings, project_assignments
+@app.post("/api/stop-bots")
+async def stop_bots(request: StopBotsRequest):
+    """Kill all bots for a meeting immediately + restore capacity"""
+    global active_meetings, meeting_workers
     
     meeting_code = request.meeting_code
     
@@ -251,7 +221,7 @@ async def kill_meeting(request: KillMeetingRequest):
     results = []
     
     # Stop bots on assigned projects
-    for project_id in meeting["projects"]:
+    for project_id in meeting.get("projects", []):
         project = next((p for p in PROJECTS if p["id"] == project_id), None)
         if project:
             try:
@@ -262,6 +232,7 @@ async def kill_meeting(request: KillMeetingRequest):
                     )
                     project["status"] = "stopped"
                     project["active_meeting"] = None
+                    project["used_bots"] = 0
                     results.append({
                         "project": project["name"],
                         "status": "stopped"
@@ -276,13 +247,13 @@ async def kill_meeting(request: KillMeetingRequest):
     meeting["status"] = "killed"
     meeting["killed_at"] = datetime.now().isoformat()
     
-    # Clean up assignments
-    if meeting_code in project_assignments:
-        del project_assignments[meeting_code]
+    # Clean up
+    if meeting_code in meeting_workers:
+        del meeting_workers[meeting_code]
     
     return {
         "success": True,
-        "message": f"Killed meeting {meeting_code}",
+        "message": f"Killed meeting {meeting_code} and restored capacity",
         "results": results
     }
 
@@ -296,7 +267,7 @@ async def toggle_billing(request: ToggleBillingRequest):
         # Kill all active meetings
         for meeting_code, meeting in list(active_meetings.items()):
             if meeting["status"] == "running":
-                for project_id in meeting["projects"]:
+                for project_id in meeting.get("projects", []):
                     project = next((p for p in PROJECTS if p["id"] == project_id), None)
                     if project:
                         try:
@@ -307,6 +278,7 @@ async def toggle_billing(request: ToggleBillingRequest):
                                 )
                                 project["status"] = "stopped"
                                 project["active_meeting"] = None
+                                project["used_bots"] = 0
                         except:
                             pass
                 meeting["status"] = "paused"
@@ -319,25 +291,28 @@ async def toggle_billing(request: ToggleBillingRequest):
 
 @app.get("/api/status")
 async def get_status():
-    total_bots = 0
     running_bots = 0
+    total_bots = 0
     
     for p in PROJECTS:
         total_bots += p["total_bots"]
         if p["status"] == "running":
-            running_bots += p["total_bots"]
+            running_bots += p["used_bots"]
     
     # Clean up stale meetings
     current_meetings = {}
-    for code, meeting in active_meetings.items():
+    for code, meeting in list(active_meetings.items()):
         # Check if any project is still running for this meeting
         still_running = False
-        for project_id in meeting["projects"]:
+        for project_id in meeting.get("projects", []):
             project = next((p for p in PROJECTS if p["id"] == project_id), None)
             if project and project["status"] == "running" and project["active_meeting"] == code:
                 still_running = True
                 break
         if still_running:
+            current_meetings[code] = meeting
+        elif meeting.get("status") != "killed":
+            meeting["status"] = "completed"
             current_meetings[code] = meeting
     
     return {
@@ -345,13 +320,15 @@ async def get_status():
         "active_meetings": current_meetings,
         "total_bots": total_bots,
         "running_bots": running_bots,
-        "available_bots": total_bots - running_bots,
+        "available_bots": TOTAL_CAPACITY - running_bots,
+        "capacity": TOTAL_CAPACITY,
         "projects": [
             {
                 "id": p["id"],
                 "name": p["name"],
                 "status": p["status"],
                 "total_bots": p["total_bots"],
+                "used_bots": p["used_bots"],
                 "url": p["url"],
                 "active_meeting": p["active_meeting"]
             }
