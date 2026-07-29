@@ -116,35 +116,33 @@ async def start_bots(request: StartBotsRequest):
         raise HTTPException(status_code=403, detail="Billing is disabled. Enable billing first.")
     
     total_bots_requested = request.bot_count
+    if total_bots_requested < 1:
+        raise HTTPException(status_code=400, detail="Bot count must be at least 1.")
     if total_bots_requested > TOTAL_CAPACITY:
-        raise HTTPException(status_code=400, detail=f"Requested {total_bots_requested} bots, but capacity is {TOTAL_CAPACITY}")
+        raise HTTPException(status_code=400, detail=f"Requested {total_bots_requested} bots, but capacity is {TOTAL_CAPACITY}.")
     
-    # Calculate available capacity
+    # Calculate used capacity
     used_bots = sum(p["used_bots"] for p in PROJECTS)
     available_capacity = TOTAL_CAPACITY - used_bots
     if total_bots_requested > available_capacity:
-        raise HTTPException(status_code=400, detail=f"Only {available_capacity} bots available. Requested {total_bots_requested}")
+        raise HTTPException(status_code=400, detail=f"Only {available_capacity} bots available. Requested {total_bots_requested}.")
     
-    # Find idle projects with capacity
+    # Find idle projects (status == "idle" and used_bots == 0)
     available_projects = [p for p in PROJECTS if p["status"] == "idle" and p["used_bots"] == 0]
     if not available_projects:
         raise HTTPException(status_code=400, detail="No idle projects available.")
     
-    # Allocate projects to meet the requested bots
-    allocated_projects = []
+    # Allocate projects
+    allocated = []
     remaining = total_bots_requested
     for project in available_projects:
         if remaining <= 0:
             break
         take = min(project["capacity"], remaining)
-        allocated_projects.append({
-            "project": project,
-            "bots": take
-        })
+        allocated.append({"project": project, "bots": take})
         remaining -= take
     
     if remaining > 0:
-        # Not enough capacity (should not happen as we checked earlier)
         raise HTTPException(status_code=400, detail="Not enough capacity even after allocation.")
     
     # Start bots on allocated projects
@@ -152,7 +150,7 @@ async def start_bots(request: StartBotsRequest):
     total_started = 0
     assigned_project_ids = []
     
-    for alloc in allocated_projects:
+    for alloc in allocated:
         project = alloc["project"]
         count = alloc["bots"]
         try:
@@ -168,7 +166,6 @@ async def start_bots(request: StartBotsRequest):
                         "custom_names": request.custom_names[:count] if request.custom_names else None
                     }
                 )
-                
                 if response.status_code == 200:
                     project["status"] = "running"
                     project["active_meeting"] = request.meeting_code
@@ -193,21 +190,21 @@ async def start_bots(request: StartBotsRequest):
                 "error": str(e)
             })
     
-    # Track meeting
-    if request.meeting_code not in active_meetings:
-        active_meetings[request.meeting_code] = {
-            "meeting_code": request.meeting_code,
-            "started_at": datetime.now().isoformat(),
-            "total_bots": total_started,
-            "bots": total_started,
-            "projects": assigned_project_ids,
-            "duration": request.duration_minutes,
-            "status": "running",
-            "name_type": request.name_type
-        }
-    else:
-        active_meetings[request.meeting_code]["status"] = "running"
-        active_meetings[request.meeting_code]["total_bots"] = total_started
+    # Update or create meeting entry (replace old if exists)
+    if request.meeting_code in active_meetings:
+        # If meeting already exists, replace it (fresh start)
+        del active_meetings[request.meeting_code]
+    
+    active_meetings[request.meeting_code] = {
+        "meeting_code": request.meeting_code,
+        "started_at": datetime.now().isoformat(),
+        "total_bots": total_started,
+        "bots": total_started,
+        "projects": assigned_project_ids,
+        "duration": request.duration_minutes,
+        "status": "running",
+        "name_type": request.name_type
+    }
     
     return {
         "success": True,
@@ -306,6 +303,7 @@ async def get_status():
         if p["status"] == "running":
             running_bots += p["used_bots"]
     
+    # Only show running meetings
     current_meetings = {}
     for code, meeting in list(active_meetings.items()):
         if meeting.get("status") == "running":
