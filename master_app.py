@@ -7,7 +7,7 @@ import os
 import random
 import asyncio
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 app = FastAPI()
 
@@ -94,7 +94,17 @@ class StopBotsRequest(BaseModel):
 # STATE
 # ============================================
 billing_enabled = True
-active_meetings = {}
+active_meetings = {}  # meeting_code -> meeting data
+
+# ============================================
+# HELPER: Reset project if meeting killed
+# ============================================
+def reset_project_meeting(meeting_code):
+    for project in PROJECTS:
+        if project["active_meeting"] == meeting_code:
+            project["status"] = "idle"
+            project["active_meeting"] = None
+            project["used_bots"] = 0
 
 # ============================================
 # API ENDPOINTS
@@ -121,18 +131,23 @@ async def start_bots(request: StartBotsRequest):
     if total_bots_requested > TOTAL_CAPACITY:
         raise HTTPException(status_code=400, detail=f"Requested {total_bots_requested} bots, but capacity is {TOTAL_CAPACITY}.")
     
+    # If meeting already exists, reset its projects first (clear old)
+    if request.meeting_code in active_meetings:
+        reset_project_meeting(request.meeting_code)
+        del active_meetings[request.meeting_code]
+    
     # Calculate used capacity
     used_bots = sum(p["used_bots"] for p in PROJECTS)
     available_capacity = TOTAL_CAPACITY - used_bots
     if total_bots_requested > available_capacity:
         raise HTTPException(status_code=400, detail=f"Only {available_capacity} bots available. Requested {total_bots_requested}.")
     
-    # Find idle projects (status == "idle" and used_bots == 0)
+    # Find idle projects
     available_projects = [p for p in PROJECTS if p["status"] == "idle" and p["used_bots"] == 0]
     if not available_projects:
         raise HTTPException(status_code=400, detail="No idle projects available.")
     
-    # Allocate projects
+    # Allocate
     allocated = []
     remaining = total_bots_requested
     for project in available_projects:
@@ -145,7 +160,7 @@ async def start_bots(request: StartBotsRequest):
     if remaining > 0:
         raise HTTPException(status_code=400, detail="Not enough capacity even after allocation.")
     
-    # Start bots on allocated projects
+    # Start bots
     results = []
     total_started = 0
     assigned_project_ids = []
@@ -190,14 +205,10 @@ async def start_bots(request: StartBotsRequest):
                 "error": str(e)
             })
     
-    # Update or create meeting entry (replace old if exists)
-    if request.meeting_code in active_meetings:
-        # If meeting already exists, replace it (fresh start)
-        del active_meetings[request.meeting_code]
-    
+    # Store meeting
     active_meetings[request.meeting_code] = {
         "meeting_code": request.meeting_code,
-        "started_at": datetime.now().isoformat(),
+        "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),  # IST
         "total_bots": total_started,
         "bots": total_started,
         "projects": assigned_project_ids,
@@ -215,18 +226,16 @@ async def start_bots(request: StartBotsRequest):
 
 @app.post("/api/stop-bots")
 async def stop_bots(request: StopBotsRequest):
-    """Kill all bots for a meeting immediately + restore capacity"""
     global active_meetings
     
     meeting_code = request.meeting_code
-    
     if meeting_code not in active_meetings:
         raise HTTPException(status_code=404, detail="Meeting not found")
     
     meeting = active_meetings[meeting_code]
     results = []
     
-    # Stop bots on assigned projects
+    # Stop bots on each project
     for project_id in meeting.get("projects", []):
         project = next((p for p in PROJECTS if p["id"] == project_id), None)
         if project:
@@ -236,7 +245,7 @@ async def stop_bots(request: StopBotsRequest):
                         f"{project['url']}/api/stop-bots",
                         json={"meeting_code": meeting_code}
                     )
-                    # Reset project state
+                    # Reset project
                     project["status"] = "idle"
                     project["active_meeting"] = None
                     project["used_bots"] = 0
@@ -252,8 +261,8 @@ async def stop_bots(request: StopBotsRequest):
                     "error": str(e)
                 })
     
-    meeting["status"] = "killed"
-    meeting["killed_at"] = datetime.now().isoformat()
+    # Remove meeting from active
+    del active_meetings[meeting_code]
     
     return {
         "success": True,
@@ -263,14 +272,16 @@ async def stop_bots(request: StopBotsRequest):
 
 @app.post("/api/toggle-billing")
 async def toggle_billing(request: ToggleBillingRequest):
-    global billing_enabled
+    global billing_enabled, active_meetings
     
     billing_enabled = request.enabled
     
     if not billing_enabled:
         # Kill all active meetings
-        for meeting_code, meeting in list(active_meetings.items()):
-            if meeting["status"] == "running":
+        meetings_to_kill = list(active_meetings.keys())
+        for meeting_code in meetings_to_kill:
+            meeting = active_meetings.get(meeting_code)
+            if meeting:
                 for project_id in meeting.get("projects", []):
                     project = next((p for p in PROJECTS if p["id"] == project_id), None)
                     if project:
@@ -285,7 +296,8 @@ async def toggle_billing(request: ToggleBillingRequest):
                                 project["used_bots"] = 0
                         except:
                             pass
-                meeting["status"] = "paused"
+                # Remove meeting
+                del active_meetings[meeting_code]
     
     return {
         "success": True,
@@ -295,15 +307,10 @@ async def toggle_billing(request: ToggleBillingRequest):
 
 @app.get("/api/status")
 async def get_status():
-    running_bots = 0
-    total_bots = 0
+    running_bots = sum(p["used_bots"] for p in PROJECTS if p["status"] == "running")
+    total_bots = sum(p["capacity"] for p in PROJECTS)
     
-    for p in PROJECTS:
-        total_bots += p["capacity"]
-        if p["status"] == "running":
-            running_bots += p["used_bots"]
-    
-    # Only show running meetings
+    # Only include running meetings
     current_meetings = {}
     for code, meeting in list(active_meetings.items()):
         if meeting.get("status") == "running":
