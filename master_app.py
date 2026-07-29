@@ -21,57 +21,23 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION - 5 WORKERS (25 BOTS)
+# CONFIGURATION - SINGLE PROJECT WITH 42 REPLICAS
 # ============================================
 PROJECTS = [
     {
         "id": 1,
         "name": "zoom-worker-1",
         "url": "https://zoom-worker-production-9981.up.railway.app",
-        "capacity": 5,
-        "status": "idle",
-        "active_meeting": None,
-        "used_bots": 0
-    },
-    {
-        "id": 2,
-        "name": "zoom-worker-2",
-        "url": "https://zoom-worker-production-c2b3.up.railway.app",
-        "capacity": 5,
-        "status": "idle",
-        "active_meeting": None,
-        "used_bots": 0
-    },
-    {
-        "id": 3,
-        "name": "zoom-worker-3",
-        "url": "https://zoom-worker-production-fd51.up.railway.app",
-        "capacity": 5,
-        "status": "idle",
-        "active_meeting": None,
-        "used_bots": 0
-    },
-    {
-        "id": 4,
-        "name": "zoom-worker-4",
-        "url": "https://zoom-worker-production-ffd8.up.railway.app",
-        "capacity": 5,
-        "status": "idle",
-        "active_meeting": None,
-        "used_bots": 0
-    },
-    {
-        "id": 5,
-        "name": "zoom-worker-5",
-        "url": "https://zoom-worker-production-6d8d.up.railway.app",
-        "capacity": 5,
+        "capacity": 5,          # per replica
+        "replicas": 42,
+        "total_bots": 210,      # 42 * 5
         "status": "idle",
         "active_meeting": None,
         "used_bots": 0
     }
 ]
 
-TOTAL_CAPACITY = 25
+TOTAL_CAPACITY = 210  # 42 replicas × 5 bots
 
 # ============================================
 # MODELS
@@ -94,16 +60,17 @@ class StopBotsRequest(BaseModel):
 # STATE
 # ============================================
 billing_enabled = True
-active_meetings = {}  # meeting_code -> meeting data
+active_meetings = {}
 
 # ============================================
-# HELPER: Reset all projects (for billing off)
+# HELPER: Reset project for a meeting
 # ============================================
-def reset_all_projects():
+def reset_project(meeting_code):
     for p in PROJECTS:
-        p["status"] = "idle"
-        p["active_meeting"] = None
-        p["used_bots"] = 0
+        if p["active_meeting"] == meeting_code:
+            p["status"] = "idle"
+            p["active_meeting"] = None
+            p["used_bots"] = 0
 
 # ============================================
 # API ENDPOINTS
@@ -145,7 +112,7 @@ async def start_bots(request: StartBotsRequest):
         raise HTTPException(status_code=400, detail=f"Meeting would have {new_total} bots, exceeding capacity {TOTAL_CAPACITY}.")
     
     # We need to allocate exactly total_bots_requested new bots
-    # Find idle projects
+    # Find idle projects (there's only one, but check anyway)
     available_projects = [p for p in PROJECTS if p["status"] == "idle" and p["used_bots"] == 0]
     if not available_projects:
         raise HTTPException(status_code=400, detail="No idle projects available.")
@@ -153,24 +120,36 @@ async def start_bots(request: StartBotsRequest):
     # Allocate
     allocated = []
     remaining = total_bots_requested
-    for project in available_projects:
-        if remaining <= 0:
-            break
-        take = min(project["capacity"], remaining)
-        allocated.append({"project": project, "bots": take})
-        remaining -= take
+    # Since only one project, we will allocate all to it (up to its capacity)
+    project = available_projects[0]
+    if remaining > project["capacity"]:
+        # But project capacity is 5, we need to distribute across replicas.
+        # However, replicas are managed by Railway; we just send 5 per request.
+        # For 210 bots, we need to call worker multiple times, but master only sends one request.
+        # To handle larger bot counts, we need to loop and send multiple requests to the same worker.
+        # But worker only accepts up to 5 per call. So we need to split.
+        # For simplicity, we will send multiple requests sequentially.
+        # We'll do this in a separate loop below.
+        pass
     
-    if remaining > 0:
-        raise HTTPException(status_code=400, detail="Not enough capacity even after allocation.")
+    # We'll just send one request with bot_count = min(5, remaining) and loop if needed.
+    # But the request.bot_count is already given; we can't split inside this endpoint.
+    # So we assume the user will call with bot_count <= 5 per request.
+    # If they want 210, they need to call multiple times or we need to handle splitting.
+    # Let's implement splitting: if bot_count > 5, we'll split into multiple worker calls.
     
-    # Start bots on allocated projects
-    results = []
+    # Get the single project
+    project = PROJECTS[0]
     total_started = 0
     assigned_project_ids = []
+    results = []
     
-    for alloc in allocated:
-        project = alloc["project"]
-        count = alloc["bots"]
+    # Split bot_count into chunks of 5 (max per worker)
+    chunks = [5] * (total_bots_requested // 5)
+    if total_bots_requested % 5 != 0:
+        chunks.append(total_bots_requested % 5)
+    
+    for chunk in chunks:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 response = await client.post(
@@ -178,22 +157,22 @@ async def start_bots(request: StartBotsRequest):
                     json={
                         "meeting_code": request.meeting_code,
                         "passcode": request.passcode,
-                        "bot_count": count,
+                        "bot_count": chunk,
                         "duration_minutes": request.duration_minutes,
                         "name_type": request.name_type,
-                        "custom_names": request.custom_names[:count] if request.custom_names else None
+                        "custom_names": request.custom_names[:chunk] if request.custom_names else None
                     }
                 )
                 if response.status_code == 200:
                     project["status"] = "running"
                     project["active_meeting"] = request.meeting_code
-                    project["used_bots"] = count
+                    project["used_bots"] += chunk
                     assigned_project_ids.append(project["id"])
-                    total_started += count
+                    total_started += chunk
                     results.append({
                         "project": project["name"],
                         "status": "success",
-                        "bots": count
+                        "bots": chunk
                     })
                 else:
                     results.append({
@@ -210,14 +189,11 @@ async def start_bots(request: StartBotsRequest):
     
     # Update or create meeting entry (cumulative)
     if request.meeting_code in active_meetings:
-        # Update existing meeting
         meeting = active_meetings[request.meeting_code]
         meeting["total_bots"] = meeting.get("total_bots", 0) + total_started
-        meeting["bots"] = meeting["total_bots"]  # for display
         meeting["projects"] = meeting.get("projects", []) + assigned_project_ids
-        meeting["duration"] = request.duration_minutes  # update duration if needed
+        meeting["duration"] = request.duration_minutes
         meeting["status"] = "running"
-        # Keep start time as original
     else:
         active_meetings[request.meeting_code] = {
             "meeting_code": request.meeting_code,
@@ -248,33 +224,30 @@ async def stop_bots(request: StopBotsRequest):
     meeting = active_meetings[meeting_code]
     results = []
     
-    # Stop bots on each project assigned to this meeting
-    for project_id in meeting.get("projects", []):
-        project = next((p for p in PROJECTS if p["id"] == project_id), None)
-        if project:
-            try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    response = await client.post(
-                        f"{project['url']}/api/stop-bots",
-                        json={"meeting_code": meeting_code}
-                    )
-                    # Reset project
-                    project["status"] = "idle"
-                    project["active_meeting"] = None
-                    project["used_bots"] = 0
-                    results.append({
-                        "project": project["name"],
-                        "status": "stopped",
-                        "bots_killed": response.json().get("bots_killed", 0)
-                    })
-            except Exception as e:
+    # Reset the project (only one)
+    project = PROJECTS[0]
+    if project["active_meeting"] == meeting_code:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(
+                    f"{project['url']}/api/stop-bots",
+                    json={"meeting_code": meeting_code}
+                )
+                project["status"] = "idle"
+                project["active_meeting"] = None
+                project["used_bots"] = 0
                 results.append({
                     "project": project["name"],
-                    "status": "failed",
-                    "error": str(e)
+                    "status": "stopped",
+                    "bots_killed": response.json().get("bots_killed", 0)
                 })
+        except Exception as e:
+            results.append({
+                "project": project["name"],
+                "status": "failed",
+                "error": str(e)
+            })
     
-    # Remove meeting from active
     total_bots = meeting["total_bots"]
     del active_meetings[meeting_code]
     
@@ -297,22 +270,19 @@ async def toggle_billing(request: ToggleBillingRequest):
         for meeting_code in meetings_to_kill:
             meeting = active_meetings.get(meeting_code)
             if meeting:
-                # Kill bots on each project
-                for project_id in meeting.get("projects", []):
-                    project = next((p for p in PROJECTS if p["id"] == project_id), None)
-                    if project:
-                        try:
-                            async with httpx.AsyncClient(timeout=5) as client:
-                                await client.post(
-                                    f"{project['url']}/api/stop-bots",
-                                    json={"meeting_code": meeting_code}
-                                )
-                                project["status"] = "idle"
-                                project["active_meeting"] = None
-                                project["used_bots"] = 0
-                        except:
-                            pass
-                # Remove meeting
+                project = PROJECTS[0]
+                if project["active_meeting"] == meeting_code:
+                    try:
+                        async with httpx.AsyncClient(timeout=5) as client:
+                            await client.post(
+                                f"{project['url']}/api/stop-bots",
+                                json={"meeting_code": meeting_code}
+                            )
+                            project["status"] = "idle"
+                            project["active_meeting"] = None
+                            project["used_bots"] = 0
+                    except:
+                        pass
                 del active_meetings[meeting_code]
     
     return {
@@ -324,7 +294,7 @@ async def toggle_billing(request: ToggleBillingRequest):
 @app.get("/api/status")
 async def get_status():
     running_bots = sum(p["used_bots"] for p in PROJECTS if p["status"] == "running")
-    total_bots = sum(p["capacity"] for p in PROJECTS)
+    total_bots = sum(p["total_bots"] for p in PROJECTS)
     
     # Only include running meetings
     current_meetings = {}
@@ -345,6 +315,8 @@ async def get_status():
                 "name": p["name"],
                 "status": p["status"],
                 "capacity": p["capacity"],
+                "replicas": p["replicas"],
+                "total_bots": p["total_bots"],
                 "used_bots": p["used_bots"],
                 "url": p["url"],
                 "active_meeting": p["active_meeting"]
