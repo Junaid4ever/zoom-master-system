@@ -121,17 +121,23 @@ async def start_bots(request: StartBotsRequest):
     if not billing_enabled:
         raise HTTPException(status_code=403, detail="Billing is disabled. Enable billing first.")
     
-    # Calculate total bots requested
     total_bots_requested = request.bot_count
     if total_bots_requested > TOTAL_CAPACITY:
         raise HTTPException(status_code=400, detail=f"Requested {total_bots_requested} bots, but capacity is {TOTAL_CAPACITY}")
+    
+    # Calculate running bots
+    running_bots = sum(p["used_bots"] for p in PROJECTS if p["status"] == "running")
+    available = TOTAL_CAPACITY - running_bots
+    
+    if total_bots_requested > available:
+        raise HTTPException(status_code=400, detail=f"Only {available} bots available. Requested {total_bots_requested}")
     
     # Find available projects
     available_projects = [p for p in PROJECTS if p["status"] != "running"]
     if not available_projects:
         raise HTTPException(status_code=400, detail="No available projects. All are busy.")
     
-    # Distribute bots evenly
+    # Distribute bots
     bots_per_project = max(1, total_bots_requested // len(available_projects))
     remaining = total_bots_requested % len(available_projects)
     
@@ -146,8 +152,6 @@ async def start_bots(request: StartBotsRequest):
         
         try:
             async with httpx.AsyncClient(timeout=30) as client:
-                # Get names for this project
-                name_count = count
                 response = await client.post(
                     f"{project['url']}/api/start-bots",
                     json={
@@ -193,7 +197,8 @@ async def start_bots(request: StartBotsRequest):
             "bots": total_started,
             "projects": assigned_projects,
             "duration": request.duration_minutes,
-            "status": "running"
+            "status": "running",
+            "name_type": request.name_type
         }
         meeting_workers[request.meeting_code] = assigned_projects
     else:
@@ -247,7 +252,6 @@ async def stop_bots(request: StopBotsRequest):
     meeting["status"] = "killed"
     meeting["killed_at"] = datetime.now().isoformat()
     
-    # Clean up
     if meeting_code in meeting_workers:
         del meeting_workers[meeting_code]
     
@@ -264,7 +268,6 @@ async def toggle_billing(request: ToggleBillingRequest):
     billing_enabled = request.enabled
     
     if not billing_enabled:
-        # Kill all active meetings
         for meeting_code, meeting in list(active_meetings.items()):
             if meeting["status"] == "running":
                 for project_id in meeting.get("projects", []):
@@ -299,20 +302,9 @@ async def get_status():
         if p["status"] == "running":
             running_bots += p["used_bots"]
     
-    # Clean up stale meetings
     current_meetings = {}
     for code, meeting in list(active_meetings.items()):
-        # Check if any project is still running for this meeting
-        still_running = False
-        for project_id in meeting.get("projects", []):
-            project = next((p for p in PROJECTS if p["id"] == project_id), None)
-            if project and project["status"] == "running" and project["active_meeting"] == code:
-                still_running = True
-                break
-        if still_running:
-            current_meetings[code] = meeting
-        elif meeting.get("status") != "killed":
-            meeting["status"] = "completed"
+        if meeting.get("status") == "running":
             current_meetings[code] = meeting
     
     return {
