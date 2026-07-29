@@ -40,9 +40,6 @@
             --scrollbar-thumb: rgba(0,0,0,0.08);
         }
 
-        /* ========================================== */
-        /* RESET */
-        /* ========================================== */
         * {
             margin: 0;
             padding: 0;
@@ -57,18 +54,13 @@
             transition: background 0.3s, color 0.3s;
         }
 
-        /* ========================================== */
-        /* DASHBOARD */
-        /* ========================================== */
         .dashboard {
             max-width: 1400px;
             margin: 0 auto;
             padding: 16px 20px;
         }
 
-        /* ========================================== */
         /* HEADER */
-        /* ========================================== */
         .header {
             display: flex;
             justify-content: space-between;
@@ -175,18 +167,14 @@
             transform: translateX(20px);
         }
 
-        /* ========================================== */
         /* MAIN LAYOUT */
-        /* ========================================== */
         .main {
             display: grid;
             grid-template-columns: 1.6fr 1fr;
             gap: 16px;
         }
 
-        /* ========================================== */
         /* CARDS */
-        /* ========================================== */
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -202,9 +190,7 @@
             margin-bottom: 14px;
         }
 
-        /* ========================================== */
         /* FORM ELEMENTS */
-        /* ========================================== */
         .meeting-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -255,9 +241,7 @@
             color: var(--text-primary);
         }
 
-        /* ========================================== */
         /* BUTTONS */
-        /* ========================================== */
         .action-row {
             display: flex;
             gap: 8px;
@@ -308,14 +292,7 @@
             color: var(--text-primary);
         }
 
-        .btn-success {
-            background: #00ff64;
-            color: #000;
-        }
-
-        /* ========================================== */
         /* STATUS BAR */
-        /* ========================================== */
         .status-bar {
             padding: 10px 14px;
             background: rgba(0, 0, 0, 0.3);
@@ -344,9 +321,7 @@
             border: 1px solid rgba(0, 210, 255, 0.1);
         }
 
-        /* ========================================== */
         /* CUSTOM NAMES */
-        /* ========================================== */
         .custom-names-area {
             display: flex;
             flex-direction: column;
@@ -369,9 +344,7 @@
             border-color: #7a5cff;
         }
 
-        /* ========================================== */
         /* TABLES */
-        /* ========================================== */
         .task-table {
             width: 100%;
             border-collapse: collapse;
@@ -415,9 +388,7 @@
             background: rgba(255, 68, 68, 0.2);
         }
 
-        /* ========================================== */
         /* LOGS */
-        /* ========================================== */
         #logsContainer {
             max-height: 180px;
             overflow-y: auto;
@@ -445,9 +416,7 @@
             margin-right: 8px;
         }
 
-        /* ========================================== */
         /* TOGGLE SWITCH */
-        /* ========================================== */
         .toggle-switch {
             position: relative;
             width: 44px;
@@ -519,9 +488,7 @@
             gap: 6px;
         }
 
-        /* ========================================== */
         /* SCROLLBAR */
-        /* ========================================== */
         ::-webkit-scrollbar {
             width: 4px;
             height: 4px;
@@ -536,9 +503,7 @@
             border-radius: 4px;
         }
 
-        /* ========================================== */
         /* RESPONSIVE */
-        /* ========================================== */
         @media (max-width: 1200px) {
             .main {
                 grid-template-columns: 1fr;
@@ -568,9 +533,7 @@
             }
         }
 
-        /* ========================================== */
         /* ACTIVE MEETING CARD */
-        /* ========================================== */
         .meeting-item {
             background: rgba(0, 210, 255, 0.05);
             border: 1px solid rgba(0, 210, 255, 0.1);
@@ -609,11 +572,6 @@
             background: rgba(255, 68, 68, 0.1);
         }
 
-        .meeting-item .meeting-status.completed {
-            color: #ffaa00;
-            background: rgba(255, 170, 0, 0.1);
-        }
-
         .meeting-item .meeting-time {
             font-size: 11px;
             color: var(--text-muted);
@@ -628,6 +586,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 11px;
+            margin-top: 6px;
         }
 
         .meeting-item .kill-btn-small:hover {
@@ -639,9 +598,7 @@
 
 <div class="dashboard">
 
-    <!-- ========================================== -->
     <!-- HEADER -->
-    <!-- ========================================== -->
     <header class="header">
         <div class="header-left">
             <h1>🚀 ZOOM</h1>
@@ -651,7 +608,6 @@
             <span class="usage">Usage: <strong id="usageCount">0/25</strong></span>
             <span class="usage available" id="availableCount">Available: 25</span>
             
-            <!-- Theme Toggle -->
             <div class="theme-toggle" onclick="toggleTheme()">
                 <span>🌙</span>
                 <div class="toggle-track">
@@ -664,9 +620,7 @@
         </div>
     </header>
 
-    <!-- ========================================== -->
     <!-- MAIN -->
-    <!-- ========================================== -->
     <main class="main">
 
         <!-- LEFT COLUMN -->
@@ -716,7 +670,6 @@
                     </div>
                 </div>
 
-                <!-- CUSTOM NAMES DROPDOWN -->
                 <div id="customNamesGroup" style="display:none; margin-top:10px;">
                     <div class="form-group">
                         <label>Custom Names (one per line)</label>
@@ -748,9 +701,7 @@
         <!-- RIGHT COLUMN -->
         <div class="right-column">
 
-            <!-- ========================================== -->
             <!-- ACTIVE MEETING STATUS -->
-            <!-- ========================================== -->
             <div class="card" style="border-color: rgba(0,210,255,0.3);">
                 <h2>📌 Active Meetings</h2>
                 <div id="activeMeetingDisplay">
@@ -760,9 +711,7 @@
                 </div>
             </div>
 
-            <!-- ========================================== -->
             <!-- BILLING TOGGLE -->
-            <!-- ========================================== -->
             <div class="card" style="border-color: rgba(122,92,255,0.3);">
                 <h2>⚡ System Control</h2>
                 <div class="billing-toggle-container">
@@ -984,28 +933,44 @@ async function startBots() {
 }
 
 // ============================================
-// KILL MEETING
+// KILL MEETING - FULL RESET
 // ============================================
 async function killMeeting() {
     const meetingId = document.getElementById('meetingId').value;
     const statusBar = document.getElementById('statusBar');
 
-    if (!confirm(`Kill all bots in meeting ${meetingId}?`)) return;
+    if (!confirm(`Kill all bots in meeting ${meetingId}? This will reset capacity to 0.`)) return;
 
-    statusBar.innerHTML = '⏳ Killing meeting...';
+    statusBar.innerHTML = '⏳ Killing meeting & resetting capacity...';
     statusBar.className = 'status-bar running';
 
     try {
+        // First, kill the meeting
         const response = await fetch(`${API_URL}/api/stop-bots`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ meeting_code: meetingId })
         });
         const data = await response.json();
-        statusBar.innerHTML = `✅ ${data.message}`;
+        
+        statusBar.innerHTML = `✅ ${data.message} | Capacity reset to 0`;
         statusBar.className = 'status-bar success';
-        addLog(`🛑 Killed meeting ${meetingId}`);
-        updateStats();
+        addLog(`🛑 Killed meeting ${meetingId} - Capacity reset`);
+        
+        // Force update stats immediately
+        await updateStats();
+        
+        // Extra: Clear meeting from display
+        document.getElementById('activeMeetingDisplay').innerHTML = `
+            <div style="text-align:center;padding:15px;color:var(--text-muted);">
+                No active meeting
+            </div>
+        `;
+        
+        // Reset usage display
+        document.getElementById('usageCount').textContent = '0/25';
+        document.getElementById('availableCount').textContent = 'Available: 25';
+        
     } catch(e) {
         statusBar.innerHTML = `❌ ${e.message}`;
         statusBar.className = 'status-bar error';
@@ -1032,7 +997,7 @@ async function killSpecificMeeting(meetingCode) {
         statusBar.innerHTML = `✅ ${data.message}`;
         statusBar.className = 'status-bar success';
         addLog(`🛑 Killed meeting ${meetingCode}`);
-        updateStats();
+        await updateStats();
     } catch(e) {
         statusBar.innerHTML = `❌ ${e.message}`;
         statusBar.className = 'status-bar error';
@@ -1059,7 +1024,7 @@ function addLog(message) {
 }
 
 // ============================================
-// UPDATE STATS
+// UPDATE STATS - WITH MEETING REMOVAL
 // ============================================
 async function updateStats() {
     try {
@@ -1068,22 +1033,22 @@ async function updateStats() {
         
         const totalBots = data.total_bots || 0;
         const runningBots = data.running_bots || 0;
-        const availableBots = totalBots - runningBots;
+        const availableBots = Math.max(0, 25 - runningBots);
         
-        document.getElementById('usageCount').textContent = `${runningBots}/${totalBots || 25}`;
-        document.getElementById('availableCount').textContent = `Available: ${Math.max(0, availableBots)}`;
+        document.getElementById('usageCount').textContent = `${runningBots}/25`;
+        document.getElementById('availableCount').textContent = `Available: ${availableBots}`;
         
-        // Update active meeting display
+        // Update active meeting display - ONLY show running meetings
         const activeMeetingDiv = document.getElementById('activeMeetingDisplay');
         const meetings = data.active_meetings || {};
-        const meetingKeys = Object.keys(meetings);
+        const meetingKeys = Object.keys(meetings).filter(code => {
+            return meetings[code].status === 'running';
+        });
         
         if (meetingKeys.length > 0) {
             let html = '';
             for (const code of meetingKeys) {
                 const meeting = meetings[code];
-                const statusClass = meeting.status === 'killed' ? 'killed' : 
-                                   meeting.status === 'completed' ? 'completed' : '';
                 html += `
                     <div class="meeting-item">
                         <div class="meeting-header">
@@ -1091,7 +1056,7 @@ async function updateStats() {
                                 <span class="meeting-code">📌 ${code}</span>
                                 <span class="meeting-bots">${meeting.bots || meeting.total_bots || 0} bots</span>
                             </div>
-                            <span class="meeting-status ${statusClass}">${meeting.status || 'running'}</span>
+                            <span class="meeting-status">${meeting.status || 'running'}</span>
                         </div>
                         <div class="meeting-time">
                             Started: ${new Date(meeting.start_time || meeting.started_at).toLocaleString()}
@@ -1112,7 +1077,7 @@ async function updateStats() {
             `;
         }
         
-        // Update previous tasks table
+        // Update previous tasks table - show only active meetings
         const taskBody = document.getElementById('prevTaskTableBody');
         if (meetingKeys.length > 0) {
             let html = '';
@@ -1122,7 +1087,7 @@ async function updateStats() {
                     <tr>
                         <td>${code}</td>
                         <td>${meeting.bots || meeting.total_bots || 0}</td>
-                        <td><span style="color:${meeting.status === 'killed' ? '#ff4444' : '#00d2ff'}">${meeting.status || 'running'}</span></td>
+                        <td><span style="color:#00ff64;">${meeting.status || 'running'}</span></td>
                         <td>
                             <button class="btn-action" onclick="killSpecificMeeting('${code}')">🗑️ Kill</button>
                         </td>
@@ -1183,7 +1148,7 @@ function cancelAll() {
 // ============================================
 // AUTO REFRESH
 // ============================================
-setInterval(updateStats, 5000);
+setInterval(updateStats, 3000);
 
 // ============================================
 // INIT
