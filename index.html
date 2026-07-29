@@ -4,7 +4,636 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Zoom Bot - Dashboard</title>
-    <link rel="stylesheet" href="style.css" />
+    <style>
+        /* ========================================== */
+        /* CSS VARIABLES - DAY/NIGHT THEME */
+        /* ========================================== */
+        :root {
+            --bg-primary: #0d0d1a;
+            --bg-secondary: rgba(255,255,255,0.02);
+            --bg-card: rgba(255,255,255,0.03);
+            --border-color: rgba(255,255,255,0.05);
+            --text-primary: #e0e0e0;
+            --text-secondary: rgba(255,255,255,0.6);
+            --text-muted: rgba(255,255,255,0.3);
+            --input-bg: rgba(255,255,255,0.04);
+            --input-border: rgba(255,255,255,0.06);
+            --shadow: 0 20px 60px rgba(0,0,0,0.5);
+            --toggle-bg: rgba(255,255,255,0.1);
+            --scrollbar-track: rgba(255,255,255,0.02);
+            --scrollbar-thumb: rgba(255,255,255,0.08);
+        }
+
+        body.light {
+            --bg-primary: #f0f2f5;
+            --bg-secondary: rgba(0,0,0,0.02);
+            --bg-card: rgba(0,0,0,0.03);
+            --border-color: rgba(0,0,0,0.08);
+            --text-primary: #1a1a2e;
+            --text-secondary: rgba(0,0,0,0.6);
+            --text-muted: rgba(0,0,0,0.3);
+            --input-bg: rgba(0,0,0,0.04);
+            --input-border: rgba(0,0,0,0.08);
+            --shadow: 0 20px 60px rgba(0,0,0,0.1);
+            --toggle-bg: rgba(0,0,0,0.1);
+            --scrollbar-track: rgba(0,0,0,0.02);
+            --scrollbar-thumb: rgba(0,0,0,0.08);
+        }
+
+        /* ========================================== */
+        /* RESET */
+        /* ========================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* ========================================== */
+        /* DASHBOARD */
+        /* ========================================== */
+        .dashboard {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 20px;
+        }
+
+        /* ========================================== */
+        /* HEADER */
+        /* ========================================== */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-left h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #7a5cff, #00d2ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(122, 92, 255, 0.15);
+            color: #7a5cff;
+            border: 1px solid rgba(122, 92, 255, 0.2);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .usage {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .usage strong {
+            color: var(--text-primary);
+        }
+
+        .usage.available {
+            color: #00ff64;
+        }
+
+        .btn-new-ui {
+            padding: 6px 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-new-ui:hover {
+            background: rgba(122, 92, 255, 0.1);
+            color: var(--text-primary);
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .theme-toggle .toggle-track {
+            width: 44px;
+            height: 24px;
+            background: var(--toggle-bg);
+            border-radius: 12px;
+            position: relative;
+            transition: background 0.3s;
+            border: 1px solid var(--border-color);
+        }
+
+        .theme-toggle .toggle-track .toggle-thumb {
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        body.light .theme-toggle .toggle-track .toggle-thumb {
+            transform: translateX(20px);
+        }
+
+        /* ========================================== */
+        /* MAIN LAYOUT */
+        /* ========================================== */
+        .main {
+            display: grid;
+            grid-template-columns: 1.6fr 1fr;
+            gap: 16px;
+        }
+
+        /* ========================================== */
+        /* CARDS */
+        /* ========================================== */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin-bottom: 14px;
+        }
+
+        .card h2 {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 14px;
+        }
+
+        /* ========================================== */
+        /* FORM ELEMENTS */
+        /* ========================================== */
+        .meeting-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-group label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-field {
+            padding: 8px 12px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .input-field:focus {
+            border-color: #7a5cff;
+        }
+
+        .input-field::placeholder {
+            color: var(--text-muted);
+        }
+
+        select.input-field {
+            appearance: none;
+            cursor: pointer;
+        }
+
+        select.input-field option {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        /* ========================================== */
+        /* BUTTONS */
+        /* ========================================== */
+        .action-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 80px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(90deg, #7a5cff, #00d2ff);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 20px rgba(122, 92, 255, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(90deg, #ff4444, #ff6b6b);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-primary);
+        }
+
+        .btn-success {
+            background: #00ff64;
+            color: #000;
+        }
+
+        /* ========================================== */
+        /* STATUS BAR */
+        /* ========================================== */
+        .status-bar {
+            padding: 10px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+
+        .status-bar.success {
+            background: rgba(0, 255, 100, 0.06);
+            color: #00ff64;
+            border: 1px solid rgba(0, 255, 100, 0.1);
+        }
+
+        .status-bar.error {
+            background: rgba(255, 0, 0, 0.06);
+            color: #ff4444;
+            border: 1px solid rgba(255, 0, 0, 0.1);
+        }
+
+        .status-bar.running {
+            background: rgba(0, 210, 255, 0.06);
+            color: #00d2ff;
+            border: 1px solid rgba(0, 210, 255, 0.1);
+        }
+
+        /* ========================================== */
+        /* CUSTOM NAMES */
+        /* ========================================== */
+        .custom-names-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .custom-names-area textarea {
+            padding: 10px;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: monospace;
+            outline: none;
+            resize: vertical;
+        }
+
+        .custom-names-area textarea:focus {
+            border-color: #7a5cff;
+        }
+
+        /* ========================================== */
+        /* TABLES */
+        /* ========================================== */
+        .task-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .task-table thead th {
+            text-align: left;
+            padding: 8px 6px;
+            color: var(--text-muted);
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .task-table tbody td {
+            padding: 8px 6px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .task-table .no-tasks {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+        }
+
+        .btn-action {
+            padding: 2px 8px;
+            background: rgba(255, 68, 68, 0.1);
+            border: none;
+            border-radius: 4px;
+            color: #ff4444;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .btn-action:hover {
+            background: rgba(255, 68, 68, 0.2);
+        }
+
+        /* ========================================== */
+        /* LOGS */
+        /* ========================================== */
+        #logsContainer {
+            max-height: 180px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .log-placeholder {
+            color: var(--text-muted);
+            text-align: center;
+            padding: 20px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .log-entry .time {
+            color: var(--text-muted);
+            margin-right: 8px;
+        }
+
+        /* ========================================== */
+        /* TOGGLE SWITCH */
+        /* ========================================== */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-switch .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--toggle-bg);
+            border-radius: 12px;
+            transition: all 0.3s;
+            border: 1px solid var(--border-color);
+        }
+
+        .toggle-switch .toggle-slider::before {
+            content: '';
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: #fff;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: #7a5cff;
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+        }
+
+        .large-toggle {
+            width: 56px;
+            height: 30px;
+        }
+
+        .large-toggle .toggle-slider {
+            border-radius: 15px;
+        }
+
+        .large-toggle .toggle-slider::before {
+            height: 24px;
+            width: 24px;
+            left: 2px;
+            bottom: 2px;
+        }
+
+        .large-toggle input:checked + .toggle-slider::before {
+            transform: translateX(26px);
+        }
+
+        .billing-toggle-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        /* ========================================== */
+        /* SCROLLBAR */
+        /* ========================================== */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 4px;
+        }
+
+        /* ========================================== */
+        /* RESPONSIVE */
+        /* ========================================== */
+        @media (max-width: 1200px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-start;
+            }
+            .header-right {
+                flex-wrap: wrap;
+            }
+            .meeting-row {
+                grid-template-columns: 1fr 1fr;
+            }
+            .action-row {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .meeting-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ========================================== */
+        /* ACTIVE MEETING CARD */
+        /* ========================================== */
+        .meeting-item {
+            background: rgba(0, 210, 255, 0.05);
+            border: 1px solid rgba(0, 210, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+
+        .meeting-item .meeting-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .meeting-item .meeting-code {
+            color: #00d2ff;
+            font-weight: 600;
+        }
+
+        .meeting-item .meeting-bots {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-left: 12px;
+        }
+
+        .meeting-item .meeting-status {
+            font-size: 11px;
+            color: #00ff64;
+            background: rgba(0, 255, 100, 0.1);
+            padding: 2px 10px;
+            border-radius: 12px;
+        }
+
+        .meeting-item .meeting-status.killed {
+            color: #ff4444;
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .meeting-item .meeting-status.completed {
+            color: #ffaa00;
+            background: rgba(255, 170, 0, 0.1);
+        }
+
+        .meeting-item .meeting-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .meeting-item .kill-btn-small {
+            background: rgba(255, 68, 68, 0.1);
+            border: none;
+            color: #ff4444;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .meeting-item .kill-btn-small:hover {
+            background: rgba(255, 68, 68, 0.2);
+        }
+    </style>
 </head>
 <body>
 
@@ -20,7 +649,17 @@
         </div>
         <div class="header-right">
             <span class="usage">Usage: <strong id="usageCount">0/25</strong></span>
-            <span class="usage" id="availableCount" style="color:#00ff64;">Available: 25</span>
+            <span class="usage available" id="availableCount">Available: 25</span>
+            
+            <!-- Theme Toggle -->
+            <div class="theme-toggle" onclick="toggleTheme()">
+                <span>🌙</span>
+                <div class="toggle-track">
+                    <div class="toggle-thumb"></div>
+                </div>
+                <span>☀️</span>
+            </div>
+            
             <button class="btn-new-ui" onclick="refreshStatus()">🔄 Refresh</button>
         </div>
     </header>
@@ -113,9 +752,9 @@
             <!-- ACTIVE MEETING STATUS -->
             <!-- ========================================== -->
             <div class="card" style="border-color: rgba(0,210,255,0.3);">
-                <h2>📌 Active Meeting Status</h2>
+                <h2>📌 Active Meetings</h2>
                 <div id="activeMeetingDisplay">
-                    <div style="text-align:center;padding:15px;color:rgba(255,255,255,0.3);">
+                    <div style="text-align:center;padding:15px;color:var(--text-muted);">
                         No active meeting
                     </div>
                 </div>
@@ -135,7 +774,7 @@
                         </label>
                         <span id="billingLabel" style="font-weight:600;color:#00ff64;font-size:14px;">🟢 ACTIVE</span>
                     </div>
-                    <span style="font-size:12px;color:rgba(255,255,255,0.3);">
+                    <span style="font-size:12px;color:var(--text-muted);">
                         Turn OFF to stop all bots & hold resources. Turn ON to resume.
                     </span>
                 </div>
@@ -202,6 +841,13 @@
 // API CONFIG
 // ============================================
 const API_URL = 'https://zoom-master-system-production.up.railway.app';
+
+// ============================================
+// THEME TOGGLE
+// ============================================
+function toggleTheme() {
+    document.body.classList.toggle('light');
+}
 
 // ============================================
 // TOGGLE CUSTOM NAMES
@@ -350,7 +996,7 @@ async function killMeeting() {
     statusBar.className = 'status-bar running';
 
     try {
-        const response = await fetch(`${API_URL}/api/kill-meeting`, {
+        const response = await fetch(`${API_URL}/api/stop-bots`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ meeting_code: meetingId })
@@ -359,6 +1005,33 @@ async function killMeeting() {
         statusBar.innerHTML = `✅ ${data.message}`;
         statusBar.className = 'status-bar success';
         addLog(`🛑 Killed meeting ${meetingId}`);
+        updateStats();
+    } catch(e) {
+        statusBar.innerHTML = `❌ ${e.message}`;
+        statusBar.className = 'status-bar error';
+    }
+}
+
+// ============================================
+// KILL SPECIFIC MEETING FROM TABLE
+// ============================================
+async function killSpecificMeeting(meetingCode) {
+    if (!confirm(`Kill all bots in meeting ${meetingCode}?`)) return;
+    
+    const statusBar = document.getElementById('statusBar');
+    statusBar.innerHTML = `⏳ Killing meeting ${meetingCode}...`;
+    statusBar.className = 'status-bar running';
+
+    try {
+        const response = await fetch(`${API_URL}/api/stop-bots`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ meeting_code: meetingCode })
+        });
+        const data = await response.json();
+        statusBar.innerHTML = `✅ ${data.message}`;
+        statusBar.className = 'status-bar success';
+        addLog(`🛑 Killed meeting ${meetingCode}`);
         updateStats();
     } catch(e) {
         statusBar.innerHTML = `❌ ${e.message}`;
@@ -395,10 +1068,10 @@ async function updateStats() {
         
         const totalBots = data.total_bots || 0;
         const runningBots = data.running_bots || 0;
-        const availableBots = data.available_bots || 0;
+        const availableBots = totalBots - runningBots;
         
-        document.getElementById('usageCount').textContent = `${runningBots}/${totalBots}`;
-        document.getElementById('availableCount').textContent = `Available: ${availableBots}`;
+        document.getElementById('usageCount').textContent = `${runningBots}/${totalBots || 25}`;
+        document.getElementById('availableCount').textContent = `Available: ${Math.max(0, availableBots)}`;
         
         // Update active meeting display
         const activeMeetingDiv = document.getElementById('activeMeetingDisplay');
@@ -409,21 +1082,23 @@ async function updateStats() {
             let html = '';
             for (const code of meetingKeys) {
                 const meeting = meetings[code];
+                const statusClass = meeting.status === 'killed' ? 'killed' : 
+                                   meeting.status === 'completed' ? 'completed' : '';
                 html += `
-                    <div style="background:rgba(0,210,255,0.05);border:1px solid rgba(0,210,255,0.1);border-radius:8px;padding:12px;margin-bottom:8px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div class="meeting-item">
+                        <div class="meeting-header">
                             <div>
-                                <strong style="color:#00d2ff;">📌 ${code}</strong>
-                                <span style="font-size:12px;color:rgba(255,255,255,0.5);margin-left:12px;">
-                                    ${meeting.total_bots || 0} bots
-                                </span>
+                                <span class="meeting-code">📌 ${code}</span>
+                                <span class="meeting-bots">${meeting.bots || meeting.total_bots || 0} bots</span>
                             </div>
-                            <span style="font-size:11px;color:#00ff64;background:rgba(0,255,100,0.1);padding:2px 10px;border-radius:12px;">
-                                🟢 ${meeting.status || 'running'}
-                            </span>
+                            <span class="meeting-status ${statusClass}">${meeting.status || 'running'}</span>
                         </div>
-                        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:4px;">
-                            Started: ${new Date(meeting.started_at).toLocaleString()}
+                        <div class="meeting-time">
+                            Started: ${new Date(meeting.start_time || meeting.started_at).toLocaleString()}
+                            ${meeting.duration ? ` | Duration: ${meeting.duration}m` : ''}
+                        </div>
+                        <div style="margin-top:6px;">
+                            <button class="kill-btn-small" onclick="killSpecificMeeting('${code}')">🗑️ Kill</button>
                         </div>
                     </div>
                 `;
@@ -431,7 +1106,7 @@ async function updateStats() {
             activeMeetingDiv.innerHTML = html;
         } else {
             activeMeetingDiv.innerHTML = `
-                <div style="text-align:center;padding:15px;color:rgba(255,255,255,0.3);">
+                <div style="text-align:center;padding:15px;color:var(--text-muted);">
                     No active meeting
                 </div>
             `;
@@ -446,12 +1121,10 @@ async function updateStats() {
                 html += `
                     <tr>
                         <td>${code}</td>
-                        <td>${meeting.total_bots || 0}</td>
-                        <td><span style="color:#00d2ff;">${meeting.status || 'running'}</span></td>
+                        <td>${meeting.bots || meeting.total_bots || 0}</td>
+                        <td><span style="color:${meeting.status === 'killed' ? '#ff4444' : '#00d2ff'}">${meeting.status || 'running'}</span></td>
                         <td>
-                            <button class="btn-action" onclick="killSpecificMeeting('${code}')" style="background:rgba(255,68,68,0.1);border:none;color:#ff4444;padding:4px 10px;border-radius:4px;cursor:pointer;">
-                                🗑️ Kill
-                            </button>
+                            <button class="btn-action" onclick="killSpecificMeeting('${code}')">🗑️ Kill</button>
                         </td>
                     </tr>
                 `;
@@ -467,33 +1140,6 @@ async function updateStats() {
         
     } catch(e) {
         console.error('Status update failed:', e);
-    }
-}
-
-// ============================================
-// KILL SPECIFIC MEETING FROM TABLE
-// ============================================
-async function killSpecificMeeting(meetingCode) {
-    if (!confirm(`Kill all bots in meeting ${meetingCode}?`)) return;
-    
-    const statusBar = document.getElementById('statusBar');
-    statusBar.innerHTML = `⏳ Killing meeting ${meetingCode}...`;
-    statusBar.className = 'status-bar running';
-
-    try {
-        const response = await fetch(`${API_URL}/api/kill-meeting`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ meeting_code: meetingCode })
-        });
-        const data = await response.json();
-        statusBar.innerHTML = `✅ ${data.message}`;
-        statusBar.className = 'status-bar success';
-        addLog(`🛑 Killed meeting ${meetingCode}`);
-        updateStats();
-    } catch(e) {
-        statusBar.innerHTML = `❌ ${e.message}`;
-        statusBar.className = 'status-bar error';
     }
 }
 
