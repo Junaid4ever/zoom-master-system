@@ -1,5 +1,5 @@
-zoom-worker-production-ed18.up.railway.app
-zoom-worker-production-4c01.up.railway.app
-zoom-worker-production-a591.up.railway.app
-zoom-worker-production-42ed.up.railway.app
-zoom-worker-production-b501.up.railway.app
+https://zoom-worker-production-ed18.up.railway.app
+https://zoom-worker-production-4c01.up.railway.app
+https://zoom-worker-production-a591.up.railway.app
+https://zoom-worker-production-42ed.up.railway.app
+https://zoom-worker-production-b501.up.railway.app
