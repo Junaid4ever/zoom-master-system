@@ -24,7 +24,7 @@ app.add_middleware(
 # CONFIGURATION
 # ============================================
 WORKERS_FILE = os.getenv("WORKERS_FILE", "workers.txt")
-ALL_WORKERS = []  # list of dicts: {"url": str, "used": bool, "meeting": str or None}
+ALL_WORKERS = []  # list of dict: {"url": str, "used": bool, "meeting": str or None}
 
 def load_workers():
     """Load worker URLs from file, ignoring empty lines."""
@@ -86,25 +86,22 @@ async def start_bots(request: StartBotsRequest):
     if total_needed < 1:
         raise HTTPException(status_code=400, detail="Bot count must be at least 1.")
 
-    # Find available workers (not used)
+    # Find available workers
     available = [w for w in ALL_WORKERS if not w["used"]]
     if len(available) < total_needed:
         raise HTTPException(status_code=400, detail=f"Only {len(available)} workers available, requested {total_needed}.")
 
     # Allocate workers
     allocated = available[:total_needed]
-    allocated_urls = [w["url"] for w in allocated]
+    results = []
+    success_count = 0
 
-    # Mark as used
     for w in allocated:
+        # Mark as used before trying
         w["used"] = True
         w["meeting"] = request.meeting_code
         used_workers.add(w["url"])
 
-    # Send start request to each worker (with bot_count=1)
-    results = []
-    success_count = 0
-    for w in allocated:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -123,24 +120,30 @@ async def start_bots(request: StartBotsRequest):
                     success_count += 1
                     results.append({"url": w["url"], "status": "success"})
                 else:
+                    # Free worker on failure
+                    w["used"] = False
+                    w["meeting"] = None
+                    used_workers.discard(w["url"])
                     results.append({"url": w["url"], "status": "failed", "error": resp.text})
-                    # If failed, we should free the worker? For now, we keep it used; but we could free.
-                    # We'll keep it used to avoid reusing, but if many fail we might need retry logic.
         except Exception as e:
+            w["used"] = False
+            w["meeting"] = None
+            used_workers.discard(w["url"])
             results.append({"url": w["url"], "status": "failed", "error": str(e)})
 
-    # Update meeting state
-    if request.meeting_code not in active_meetings:
-        active_meetings[request.meeting_code] = {
-            "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-            "workers": allocated_urls,
-            "total_bots": success_count,
-            "status": "running"
-        }
-    else:
-        # Append new workers to existing meeting
-        active_meetings[request.meeting_code]["workers"].extend(allocated_urls)
-        active_meetings[request.meeting_code]["total_bots"] += success_count
+    # Update meeting state only if at least one bot started
+    if success_count > 0:
+        if request.meeting_code not in active_meetings:
+            active_meetings[request.meeting_code] = {
+                "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+                "workers": [w["url"] for w in allocated if w["used"]],  # only successful ones
+                "total_bots": success_count,
+                "status": "running"
+            }
+        else:
+            meeting = active_meetings[request.meeting_code]
+            meeting["workers"].extend([w["url"] for w in allocated if w["used"]])
+            meeting["total_bots"] += success_count
 
     return {
         "success": True,
@@ -161,7 +164,6 @@ async def kill_meeting(request: KillMeetingRequest):
     worker_urls = meeting["workers"]
     results = []
 
-    # Send stop request to each worker used for this meeting
     for url in worker_urls:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -184,7 +186,6 @@ async def kill_meeting(request: KillMeetingRequest):
             w["meeting"] = None
             used_workers.discard(w["url"])
 
-    # Remove meeting
     del active_meetings[meeting_code]
 
     return {
@@ -238,7 +239,7 @@ async def get_status():
         "total_capacity": total_capacity,
         "used_workers": used,
         "available_workers": total_capacity - used,
-        "workers": ALL_WORKERS  # for debugging
+        "workers": ALL_WORKERS
     }
 
 @app.post("/api/reload-workers")
