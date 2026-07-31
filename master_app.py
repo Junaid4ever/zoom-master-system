@@ -19,7 +19,7 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION - 4 WORKERS (or as many as you have)
+# CONFIGURATION - 4 WORKERS
 # ============================================
 PROJECTS = [
     {
@@ -68,7 +68,7 @@ PROJECTS = [
     }
 ]
 
-TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 840
+TOTAL_CAPACITY = 840
 
 # ============================================
 # MODELS
@@ -124,7 +124,6 @@ async def start_bots(request: StartBotsRequest):
     if not available_projects:
         raise HTTPException(status_code=400, detail="No idle projects.")
 
-    # Allocate bots to projects
     allocated = []
     remaining = total_bots_requested
     for project in available_projects:
@@ -175,7 +174,6 @@ async def start_bots(request: StartBotsRequest):
             except Exception as e:
                 results.append({"project": project["name"], "status": "failed", "error": str(e)})
 
-    # Update meeting
     if request.meeting_code in active_meetings:
         meeting = active_meetings[request.meeting_code]
         meeting["total_bots"] += total_started
@@ -199,14 +197,10 @@ async def start_bots(request: StartBotsRequest):
     }
 
 # ============================================
-# KILL MEETING — Master Controlled (No Redis)
+# KILL MEETING — Sends 50 stop requests per worker
 # ============================================
 @app.post("/api/kill-meeting")
 async def kill_meeting(request: KillMeetingRequest):
-    """
-    Kill all bots for a given meeting across ALL workers and their replicas.
-    This sends multiple stop requests to each worker to hit as many replicas as possible.
-    """
     meeting_code = request.meeting_code
 
     if meeting_code not in active_meetings:
@@ -215,11 +209,10 @@ async def kill_meeting(request: KillMeetingRequest):
     meeting = active_meetings[meeting_code]
     results = []
 
-    # For each worker, send stop requests multiple times (to hit all replicas)
     for project in PROJECTS:
         project_results = []
-        # Send 20 stop requests per worker (adjust based on replicas count)
-        for attempt in range(20):
+        # Send 50 stop requests per worker (covers 42 replicas)
+        for attempt in range(50):
             try:
                 async with httpx.AsyncClient(timeout=10) as client:
                     resp = await client.post(
@@ -234,10 +227,8 @@ async def kill_meeting(request: KillMeetingRequest):
                         project_results.append(0)
             except Exception:
                 project_results.append(0)
-            # Small delay between attempts to let load balancer rotate
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)  # 100ms delay
 
-        # Total killed for this worker (sum of all attempts)
         total_killed = sum(project_results)
         results.append({
             "project": project["name"],
@@ -250,7 +241,6 @@ async def kill_meeting(request: KillMeetingRequest):
         project["active_meeting"] = None
         project["used_bots"] = 0
 
-    # Remove meeting from active
     del active_meetings[meeting_code]
 
     return {
@@ -261,7 +251,7 @@ async def kill_meeting(request: KillMeetingRequest):
     }
 
 # ============================================
-# BILLING TOGGLE (Kills all meetings)
+# BILLING TOGGLE
 # ============================================
 @app.post("/api/toggle-billing")
 async def toggle_billing(request: dict):
@@ -270,12 +260,9 @@ async def toggle_billing(request: dict):
     billing_enabled = enabled
 
     if not enabled:
-        # Kill all active meetings using the same multi-request technique
         for meeting_code in list(active_meetings.keys()):
-            # Use the kill function but we'll just call kill endpoint internally? We'll simulate.
-            # Actually we can just loop over meetings and call the kill logic.
             for project in PROJECTS:
-                for _ in range(20):
+                for _ in range(50):
                     try:
                         async with httpx.AsyncClient(timeout=5) as client:
                             await client.post(
@@ -284,11 +271,10 @@ async def toggle_billing(request: dict):
                             )
                     except:
                         pass
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.1)
                 project["status"] = "idle"
                 project["active_meeting"] = None
                 project["used_bots"] = 0
-            # Remove meeting
             del active_meetings[meeting_code]
 
     return {
