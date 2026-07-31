@@ -19,7 +19,7 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION - 4 WORKERS
+# CONFIGURATION - 4 WORKERS (update as needed)
 # ============================================
 PROJECTS = [
     {
@@ -68,7 +68,7 @@ PROJECTS = [
     }
 ]
 
-TOTAL_CAPACITY = 840
+TOTAL_CAPACITY = sum(p["total_bots"] for p in PROJECTS)  # 840
 
 # ============================================
 # MODELS
@@ -197,16 +197,12 @@ async def start_bots(request: StartBotsRequest):
     }
 
 # ============================================
-# KILL MEETING — Sends 50 stop requests per worker
+# KILL MEETING — Always sends stop requests, even if meeting not found
 # ============================================
 @app.post("/api/kill-meeting")
 async def kill_meeting(request: KillMeetingRequest):
     meeting_code = request.meeting_code
 
-    if meeting_code not in active_meetings:
-        raise HTTPException(status_code=404, detail="Meeting not found")
-
-    meeting = active_meetings[meeting_code]
     results = []
 
     for project in PROJECTS:
@@ -241,7 +237,9 @@ async def kill_meeting(request: KillMeetingRequest):
         project["active_meeting"] = None
         project["used_bots"] = 0
 
-    del active_meetings[meeting_code]
+    # Remove meeting if it exists (ignore if not)
+    if meeting_code in active_meetings:
+        del active_meetings[meeting_code]
 
     return {
         "success": True,
