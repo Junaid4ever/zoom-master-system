@@ -26,8 +26,15 @@ app.add_middleware(
 WORKERS_FILE = os.getenv("WORKERS_FILE", "workers.txt")
 ALL_WORKERS = []  # list of dict: {"url": str, "used": bool, "meeting": str or None}
 
+def normalize_url(url: str) -> str:
+    """Ensure URL starts with http:// or https://"""
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    return url
+
 def load_workers():
-    """Load worker URLs from file, ignoring empty lines."""
+    """Load worker URLs from file, ignoring empty lines, and normalize protocol."""
     global ALL_WORKERS
     ALL_WORKERS = []
     try:
@@ -35,6 +42,8 @@ def load_workers():
             for line in f:
                 url = line.strip()
                 if url:
+                    # Normalize: add https:// if missing
+                    url = normalize_url(url)
                     ALL_WORKERS.append({"url": url, "used": False, "meeting": None})
     except FileNotFoundError:
         print(f"⚠️ Workers file '{WORKERS_FILE}' not found. Create one with URLs.")
