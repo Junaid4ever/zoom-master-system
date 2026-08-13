@@ -22,7 +22,7 @@ app.add_middleware(
 # CONFIGURATION — SINGLE WORKER WITH MULTIPLE REPLICAS
 # ============================================
 WORKER_URL = "https://zoom-worker-production-9981.up.railway.app"  # Your worker URL
-BOTS_PER_REQUEST = 15  # Max bots per request (worker capacity per replica)
+BOTS_PER_REQUEST = 10  # Max bots per request (worker capacity per replica)
 
 # ============================================
 # MODELS
