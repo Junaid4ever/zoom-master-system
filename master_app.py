@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION — SINGLE WORKER WITH 50 CAPACITY
+# CONFIGURATION — SINGLE WORKER
 # ============================================
 PROJECTS = [
     {
@@ -34,7 +34,6 @@ PROJECTS = [
         "used_bots": 0
     }
 ]
-
 TOTAL_CAPACITY = 50
 
 # ============================================
@@ -56,6 +55,29 @@ class KillMeetingRequest(BaseModel):
 # ============================================
 billing_enabled = True
 active_meetings = {}
+
+# ============================================
+# HELPER: Check if worker is actually busy
+# ============================================
+async def worker_has_running_bots(worker_url: str, meeting_code: str = None) -> bool:
+    """Check worker's /api/status to see if it has any active contexts for a meeting."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{worker_url}/api/status")
+            if resp.status_code == 200:
+                data = resp.json()
+                running_bots = data.get("running_bots", 0)
+                if running_bots == 0:
+                    return False
+                # If meeting_code provided, check if any active meetings match
+                active_meetings = data.get("active_meetings", {})
+                if meeting_code and meeting_code in active_meetings:
+                    return True
+                # If no meeting_code, just return if any bots running
+                return running_bots > 0
+    except:
+        pass
+    return False  # If can't reach worker, assume not busy
 
 # ============================================
 # API ENDPOINTS
@@ -81,14 +103,21 @@ async def start_bots(request: StartBotsRequest):
     if total_needed > TOTAL_CAPACITY:
         raise HTTPException(status_code=400, detail=f"Requested {total_needed}, but total capacity is {TOTAL_CAPACITY}.")
 
-    # Check available capacity
-    used_bots = sum(p["used_bots"] for p in PROJECTS)
-    available = TOTAL_CAPACITY - used_bots
-    if total_needed > available:
-        raise HTTPException(status_code=400, detail=f"Only {available} bots available, requested {total_needed}.")
-
-    # Only one project, so allocate all to it
     project = PROJECTS[0]
+
+    # Check if worker is actually busy (sync state)
+    worker_busy = await worker_has_running_bots(project["url"], request.meeting_code)
+    if not worker_busy and project["status"] == "running":
+        # Worker says no bots running, but master thinks it's busy -> reset master state
+        print(f"Worker reported no active bots. Resetting master state for {project['name']}.")
+        project["status"] = "idle"
+        project["active_meeting"] = None
+        project["used_bots"] = 0
+        # Also remove any stale meeting
+        if project["active_meeting"] in active_meetings:
+            del active_meetings[project["active_meeting"]]
+
+    # Now check if worker is free
     if project["status"] != "idle" or project["used_bots"] != 0:
         raise HTTPException(status_code=400, detail="Worker is busy with another meeting.")
 
@@ -114,10 +143,8 @@ async def start_bots(request: StartBotsRequest):
                 project["used_bots"] = count
                 result = {"project": project["name"], "status": "success", "bots": count}
             else:
-                result = {"project": project["name"], "status": "failed", "error": resp.text}
                 raise HTTPException(status_code=500, detail=resp.text)
     except Exception as e:
-        result = {"project": project["name"], "status": "failed", "error": str(e)}
         raise HTTPException(status_code=500, detail=str(e))
 
     # Track meeting
@@ -130,7 +157,7 @@ async def start_bots(request: StartBotsRequest):
             "status": "running"
         }
     else:
-        # If meeting already exists, add to it (shouldn't happen with single worker)
+        # If meeting already exists, update (shouldn't happen)
         meeting = active_meetings[request.meeting_code]
         meeting["total_bots"] += count
         if project["id"] not in meeting["projects"]:
