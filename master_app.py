@@ -21,22 +21,21 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION — Update with your worker URL and capacity=50
+# CONFIGURATION — SINGLE WORKER WITH 50 CAPACITY
 # ============================================
 PROJECTS = [
     {
         "id": 1,
         "name": "zoom-worker-1",
-        "url": "https://your-worker-url.railway.app",  # <-- Replace with your actual worker URL
-        "capacity": 50,  # <-- Set to 50
+        "url": "https://zoom-worker-production-9981.up.railway.app",
+        "capacity": 50,
         "status": "idle",
         "active_meeting": None,
         "used_bots": 0
     }
-    # Add more workers if you have multiple, each with capacity 50
 ]
 
-TOTAL_CAPACITY = sum(p["capacity"] for p in PROJECTS)
+TOTAL_CAPACITY = 50
 
 # ============================================
 # MODELS
@@ -79,6 +78,8 @@ async def start_bots(request: StartBotsRequest):
     total_needed = request.bot_count
     if total_needed < 1:
         raise HTTPException(status_code=400, detail="Bot count must be at least 1.")
+    if total_needed > TOTAL_CAPACITY:
+        raise HTTPException(status_code=400, detail=f"Requested {total_needed}, but total capacity is {TOTAL_CAPACITY}.")
 
     # Check available capacity
     used_bots = sum(p["used_bots"] for p in PROJECTS)
@@ -86,74 +87,61 @@ async def start_bots(request: StartBotsRequest):
     if total_needed > available:
         raise HTTPException(status_code=400, detail=f"Only {available} bots available, requested {total_needed}.")
 
-    # Find idle projects with enough capacity
-    allocated = []
-    remaining = total_needed
-    for project in PROJECTS:
-        if project["status"] == "idle" and project["used_bots"] == 0:
-            take = min(project["capacity"], remaining)
-            if take > 0:
-                allocated.append({"project": project, "bots": take})
-                remaining -= take
-        if remaining == 0:
-            break
+    # Only one project, so allocate all to it
+    project = PROJECTS[0]
+    if project["status"] != "idle" or project["used_bots"] != 0:
+        raise HTTPException(status_code=400, detail="Worker is busy with another meeting.")
 
-    if remaining > 0:
-        raise HTTPException(status_code=400, detail="Could not allocate all bots. Insufficient idle capacity.")
+    # Allocate
+    count = total_needed
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{project['url']}/api/start-bots",
+                json={
+                    "meeting_code": request.meeting_code,
+                    "passcode": request.passcode,
+                    "bot_count": count,
+                    "duration_minutes": request.duration_minutes,
+                    "name_type": request.name_type,
+                    "custom_names": request.custom_names[:count] if request.custom_names else None
+                },
+                follow_redirects=True
+            )
+            if resp.status_code == 200:
+                project["status"] = "running"
+                project["active_meeting"] = request.meeting_code
+                project["used_bots"] = count
+                result = {"project": project["name"], "status": "success", "bots": count}
+            else:
+                result = {"project": project["name"], "status": "failed", "error": resp.text}
+                raise HTTPException(status_code=500, detail=resp.text)
+    except Exception as e:
+        result = {"project": project["name"], "status": "failed", "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
-    results = []
-    total_started = 0
-    assigned_project_ids = []
-
-    for alloc in allocated:
-        project = alloc["project"]
-        count = alloc["bots"]
-        # Worker expects bot_count up to its capacity (now 50), so just send count directly
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(
-                    f"{project['url']}/api/start-bots",
-                    json={
-                        "meeting_code": request.meeting_code,
-                        "passcode": request.passcode,
-                        "bot_count": count,
-                        "duration_minutes": request.duration_minutes,
-                        "name_type": request.name_type,
-                        "custom_names": request.custom_names[:count] if request.custom_names else None
-                    },
-                    follow_redirects=True
-                )
-                if resp.status_code == 200:
-                    project["status"] = "running"
-                    project["active_meeting"] = request.meeting_code
-                    project["used_bots"] = count
-                    assigned_project_ids.append(project["id"])
-                    total_started += count
-                    results.append({"project": project["name"], "status": "success", "bots": count})
-                else:
-                    results.append({"project": project["name"], "status": "failed", "error": resp.text})
-        except Exception as e:
-            results.append({"project": project["name"], "status": "failed", "error": str(e)})
-
+    # Track meeting
     if request.meeting_code not in active_meetings:
         active_meetings[request.meeting_code] = {
             "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-            "total_bots": total_started,
-            "projects": assigned_project_ids,
+            "total_bots": count,
+            "projects": [project["id"]],
             "duration": request.duration_minutes,
             "status": "running"
         }
     else:
+        # If meeting already exists, add to it (shouldn't happen with single worker)
         meeting = active_meetings[request.meeting_code]
-        meeting["total_bots"] += total_started
-        meeting["projects"] = list(set(meeting.get("projects", []) + assigned_project_ids))
+        meeting["total_bots"] += count
+        if project["id"] not in meeting["projects"]:
+            meeting["projects"].append(project["id"])
         meeting["status"] = "running"
 
     return {
         "success": True,
-        "message": f"Started {total_started} bots for meeting {request.meeting_code}.",
-        "total_bots": total_started,
-        "results": results
+        "message": f"Started {count} bots for meeting {request.meeting_code}.",
+        "total_bots": count,
+        "results": [result]
     }
 
 @app.post("/api/kill-meeting")
@@ -164,26 +152,26 @@ async def kill_meeting(request: KillMeetingRequest):
 
     meeting = active_meetings[meeting_code]
     results = []
-
-    for project_id in meeting.get("projects", []):
-        project = next((p for p in PROJECTS if p["id"] == project_id), None)
-        if project:
-            try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.post(
-                        f"{project['url']}/api/stop-bots",
-                        json={"meeting_code": meeting_code},
-                        follow_redirects=True
-                    )
+    project = PROJECTS[0]
+    if project["active_meeting"] == meeting_code:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(
+                    f"{project['url']}/api/stop-bots",
+                    json={"meeting_code": meeting_code},
+                    follow_redirects=True
+                )
+                if resp.status_code == 200:
                     project["status"] = "idle"
                     project["active_meeting"] = None
                     project["used_bots"] = 0
                     results.append({"project": project["name"], "status": "stopped"})
-            except Exception as e:
-                results.append({"project": project["name"], "status": "failed", "error": str(e)})
+                else:
+                    results.append({"project": project["name"], "status": "failed", "error": resp.text})
+        except Exception as e:
+            results.append({"project": project["name"], "status": "failed", "error": str(e)})
 
     del active_meetings[meeting_code]
-
     return {
         "success": True,
         "message": f"Killed meeting {meeting_code}.",
@@ -197,24 +185,22 @@ async def toggle_billing(request: dict):
     billing_enabled = enabled
 
     if not enabled:
-        # Kill all active meetings
         for meeting_code in list(active_meetings.keys()):
             meeting = active_meetings[meeting_code]
-            for project_id in meeting.get("projects", []):
-                project = next((p for p in PROJECTS if p["id"] == project_id), None)
-                if project:
-                    try:
-                        async with httpx.AsyncClient(timeout=5) as client:
-                            await client.post(
-                                f"{project['url']}/api/stop-bots",
-                                json={"meeting_code": meeting_code},
-                                follow_redirects=True
-                            )
-                            project["status"] = "idle"
-                            project["active_meeting"] = None
-                            project["used_bots"] = 0
-                    except:
-                        pass
+            project = PROJECTS[0]
+            if project["active_meeting"] == meeting_code:
+                try:
+                    async with httpx.AsyncClient(timeout=5) as client:
+                        await client.post(
+                            f"{project['url']}/api/stop-bots",
+                            json={"meeting_code": meeting_code},
+                            follow_redirects=True
+                        )
+                        project["status"] = "idle"
+                        project["active_meeting"] = None
+                        project["used_bots"] = 0
+                except:
+                    pass
             del active_meetings[meeting_code]
 
     return {
