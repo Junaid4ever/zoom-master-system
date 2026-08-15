@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import uvicorn
 import httpx
 import asyncio
+import os
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -19,10 +20,23 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION — SINGLE WORKER WITH MULTIPLE REPLICAS
+# CONFIGURATION
 # ============================================
-WORKER_URL = "https://zoom-worker-production-9981.up.railway.app"  # Your worker URL
-BOTS_PER_REQUEST = 10  # Max bots per request (worker capacity per replica)
+# Static worker (your main 24GB RAM worker)
+STATIC_WORKERS = [
+    {
+        "id": 1,
+        "name": "zoom-worker-1",
+        "url": "https://zoom-worker-production-9981.up.railway.app",
+        "capacity": 50,
+        "status": "idle",
+        "active_meeting": None,
+        "used_bots": 0
+    }
+]
+
+# Dynamic registered workers (from CodeSandbox, etc.)
+REGISTERED_WORKERS = []  # each: {"worker_id": str, "url": str, "capacity": int, "status": str}
 
 # ============================================
 # MODELS
@@ -38,11 +52,34 @@ class StartBotsRequest(BaseModel):
 class KillMeetingRequest(BaseModel):
     meeting_code: str
 
+class RegisterWorkerRequest(BaseModel):
+    worker_id: str
+    url: str
+    capacity: int = 20
+
 # ============================================
 # STATE
 # ============================================
 billing_enabled = True
 active_meetings = {}
+
+# ============================================
+# HELPERS
+# ============================================
+def get_all_workers():
+    """Combine static and registered workers."""
+    all_workers = STATIC_WORKERS.copy()
+    for i, w in enumerate(REGISTERED_WORKERS):
+        all_workers.append({
+            "id": 100 + i,  # avoid id conflict
+            "name": w["worker_id"],
+            "url": w["url"],
+            "capacity": w["capacity"],
+            "status": "idle",
+            "active_meeting": None,
+            "used_bots": 0
+        })
+    return all_workers
 
 # ============================================
 # API ENDPOINTS
@@ -51,8 +88,26 @@ active_meetings = {}
 async def root():
     return {
         "message": "Master Controller Running",
-        "billing_enabled": billing_enabled
+        "billing_enabled": billing_enabled,
+        "total_capacity": sum(w["capacity"] for w in get_all_workers() if w["status"] != "busy")
     }
+
+@app.post("/api/register-worker")
+async def register_worker(request: RegisterWorkerRequest):
+    """Register a new worker (from CodeSandbox or any other source)."""
+    # Check if already registered
+    for w in REGISTERED_WORKERS:
+        if w["url"] == request.url:
+            return {"message": "Worker already registered", "worker_id": w["worker_id"]}
+    
+    REGISTERED_WORKERS.append({
+        "worker_id": request.worker_id,
+        "url": request.url,
+        "capacity": request.capacity,
+        "status": "idle"
+    })
+    print(f"✅ Registered new worker: {request.worker_id} ({request.url}) with capacity {request.capacity}")
+    return {"message": "Worker registered successfully", "worker_id": request.worker_id}
 
 @app.post("/api/start-bots")
 async def start_bots(request: StartBotsRequest):
@@ -64,65 +119,77 @@ async def start_bots(request: StartBotsRequest):
     if total_needed < 1:
         raise HTTPException(status_code=400, detail="Bot count must be at least 1.")
 
-    # Calculate how many requests needed
-    requests_needed = (total_needed + BOTS_PER_REQUEST - 1) // BOTS_PER_REQUEST
+    # Combine all workers (static + registered)
+    all_workers = get_all_workers()
+    # Filter idle workers
+    idle_workers = [w for w in all_workers if w["status"] == "idle" and w.get("used_bots", 0) == 0]
+    if not idle_workers:
+        raise HTTPException(status_code=400, detail="No idle workers available.")
+
+    # Allocate bots across idle workers (round-robin)
+    total_capacity = sum(w["capacity"] for w in idle_workers)
+    if total_needed > total_capacity:
+        raise HTTPException(status_code=400, detail=f"Requested {total_needed} bots, but available capacity is {total_capacity}.")
+
     results = []
     total_started = 0
-    assigned_workers = []  # track which requests succeeded
+    allocated_workers = []
 
-    # Send requests sequentially (or concurrently? sequentially is safer)
-    for i in range(requests_needed):
-        # Determine chunk size (last chunk may be less)
-        chunk = min(BOTS_PER_REQUEST, total_needed - total_started)
-        if chunk <= 0:
+    for worker in idle_workers:
+        if total_needed <= 0:
             break
+        take = min(worker["capacity"], total_needed)
+        worker["used_bots"] = take
+        worker["status"] = "busy"
+        worker["active_meeting"] = request.meeting_code
+        total_started += take
+        total_needed -= take
+        allocated_workers.append(worker)
+        # Send start request to worker
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
-                    f"{WORKER_URL}/api/start-bots",
+                    f"{worker['url']}/api/start-bots",
                     json={
                         "meeting_code": request.meeting_code,
                         "passcode": request.passcode,
-                        "bot_count": chunk,
+                        "bot_count": take,
                         "duration_minutes": request.duration_minutes,
                         "name_type": request.name_type,
-                        "custom_names": request.custom_names[total_started:total_started+chunk] if request.custom_names else None
+                        "custom_names": request.custom_names[:take] if request.custom_names else None
                     },
                     follow_redirects=True
                 )
                 if resp.status_code == 200:
-                    total_started += chunk
-                    results.append({"request": i+1, "status": "success", "bots": chunk})
-                    assigned_workers.append(i+1)
+                    results.append({"worker": worker["name"], "status": "success", "bots": take})
                 else:
-                    results.append({"request": i+1, "status": "failed", "error": resp.text})
+                    results.append({"worker": worker["name"], "status": "failed", "error": resp.text})
+                    # Reset worker state if failed
+                    worker["status"] = "idle"
+                    worker["active_meeting"] = None
+                    worker["used_bots"] = 0
         except Exception as e:
-            results.append({"request": i+1, "status": "failed", "error": str(e)})
+            results.append({"worker": worker["name"], "status": "failed", "error": str(e)})
+            worker["status"] = "idle"
+            worker["active_meeting"] = None
+            worker["used_bots"] = 0
 
-        # Small delay to avoid hitting the same replica repeatedly
-        await asyncio.sleep(0.1)
-
-    # Track meeting if at least one bot started
-    if total_started > 0:
-        if request.meeting_code not in active_meetings:
-            active_meetings[request.meeting_code] = {
-                "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
-                "total_bots": total_started,
-                "requests": assigned_workers,
-                "duration": request.duration_minutes,
-                "status": "running"
-            }
-        else:
-            meeting = active_meetings[request.meeting_code]
-            meeting["total_bots"] += total_started
-            meeting["requests"] += assigned_workers
-            meeting["status"] = "running"
+    # Track meeting
+    if request.meeting_code not in active_meetings:
+        active_meetings[request.meeting_code] = {
+            "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
+            "total_bots": total_started,
+            "workers": allocated_workers,
+            "status": "running"
+        }
+    else:
+        active_meetings[request.meeting_code]["total_bots"] += total_started
+        active_meetings[request.meeting_code]["workers"] += allocated_workers
 
     return {
         "success": True,
-        "message": f"Started {total_started} bots for meeting {request.meeting_code}.",
+        "message": f"Started {total_started} bots across {len(allocated_workers)} workers",
         "total_bots": total_started,
-        "requests_sent": requests_needed,
         "results": results
     }
 
@@ -133,35 +200,31 @@ async def kill_meeting(request: KillMeetingRequest):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     meeting = active_meetings[meeting_code]
-    # Send stop request multiple times to hit all replicas
-    stop_requests = meeting.get("requests", [])
-    if not stop_requests:
-        stop_requests = list(range(1, 43))  # if we don't know, try 42 times
-
     results = []
-    for i in range(len(stop_requests)):
+
+    for worker in meeting["workers"]:
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.post(
-                    f"{WORKER_URL}/api/stop-bots",
+                    f"{worker['url']}/api/stop-bots",
                     json={"meeting_code": meeting_code},
                     follow_redirects=True
                 )
                 if resp.status_code == 200:
-                    results.append({"attempt": i+1, "status": "stopped"})
+                    worker["status"] = "idle"
+                    worker["active_meeting"] = None
+                    worker["used_bots"] = 0
+                    results.append({"worker": worker["name"], "status": "stopped"})
                 else:
-                    results.append({"attempt": i+1, "status": "failed", "error": resp.text})
+                    results.append({"worker": worker["name"], "status": "failed", "error": resp.text})
         except Exception as e:
-            results.append({"attempt": i+1, "status": "failed", "error": str(e)})
-        await asyncio.sleep(0.1)
+            results.append({"worker": worker["name"], "status": "failed", "error": str(e)})
 
-    # Mark meeting killed
-    meeting["status"] = "killed"
-    meeting["killed_at"] = datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat()
+    del active_meetings[meeting_code]
 
     return {
         "success": True,
-        "message": f"Killed meeting {meeting_code}.",
+        "message": f"Killed meeting {meeting_code}",
         "results": results
     }
 
@@ -171,21 +234,23 @@ async def toggle_billing(request: dict):
     enabled = request.get("enabled", True)
     billing_enabled = enabled
     if not enabled:
-        # Kill all meetings by sending multiple stop requests
+        # Kill all active meetings
         for meeting_code in list(active_meetings.keys()):
             meeting = active_meetings[meeting_code]
-            for _ in range(42):
+            for worker in meeting["workers"]:
                 try:
                     async with httpx.AsyncClient(timeout=5) as client:
                         await client.post(
-                            f"{WORKER_URL}/api/stop-bots",
+                            f"{worker['url']}/api/stop-bots",
                             json={"meeting_code": meeting_code},
                             follow_redirects=True
                         )
+                        worker["status"] = "idle"
+                        worker["active_meeting"] = None
+                        worker["used_bots"] = 0
                 except:
                     pass
-                await asyncio.sleep(0.05)
-            meeting["status"] = "paused"
+            del active_meetings[meeting_code]
     return {
         "success": True,
         "billing_enabled": billing_enabled,
@@ -194,11 +259,22 @@ async def toggle_billing(request: dict):
 
 @app.get("/api/status")
 async def get_status():
+    all_workers = get_all_workers()
+    running_bots = sum(w.get("used_bots", 0) for w in all_workers if w["status"] == "busy")
+    total_capacity = sum(w["capacity"] for w in all_workers)
     return {
         "billing_enabled": billing_enabled,
         "active_meetings": active_meetings,
-        "total_bots_requested": sum(m["total_bots"] for m in active_meetings.values() if m["status"] == "running")
+        "total_capacity": total_capacity,
+        "running_bots": running_bots,
+        "available_bots": total_capacity - running_bots,
+        "workers": all_workers,
+        "registered_workers": REGISTERED_WORKERS
     }
 
+# ============================================
+# RUN — Dynamic Port for Railway
+# ============================================
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
