@@ -20,9 +20,19 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION — NO STATIC WORKERS (Only registered workers)
+# CONFIGURATION — Static Worker + Registered Workers
 # ============================================
-STATIC_WORKERS = []  # <-- Disabled static worker
+STATIC_WORKERS = [
+    {
+        "id": 1,
+        "name": "zoom-worker-1",
+        "url": "https://zoom-worker-production-9981.up.railway.app",
+        "capacity": 50,
+        "status": "idle",
+        "active_meeting": None,
+        "used_bots": 0
+    }
+]
 
 # Dynamic registered workers (from CodeSandbox)
 REGISTERED_WORKERS = []  # each: {"worker_id": str, "url": str, "capacity": int, "status": str}
@@ -60,7 +70,7 @@ def get_all_workers():
     all_workers = STATIC_WORKERS.copy()
     for i, w in enumerate(REGISTERED_WORKERS):
         all_workers.append({
-            "id": 100 + i,  # avoid id conflict
+            "id": 100 + i,
             "name": w["worker_id"],
             "url": w["url"],
             "capacity": w["capacity"],
@@ -83,11 +93,9 @@ async def root():
 
 @app.post("/api/register-worker")
 async def register_worker(request: RegisterWorkerRequest):
-    """Register a new worker (from CodeSandbox or any other source)."""
-    # Check if already registered
+    """Register a new worker (from CodeSandbox) - update if already exists"""
     for w in REGISTERED_WORKERS:
         if w["worker_id"] == request.worker_id:
-            # Update URL and capacity if changed
             w["url"] = request.url
             w["capacity"] = request.capacity
             print(f"🔄 Updated worker: {request.worker_id} -> {request.url}")
@@ -99,7 +107,7 @@ async def register_worker(request: RegisterWorkerRequest):
         "capacity": request.capacity,
         "status": "idle"
     })
-    print(f"✅ Registered new worker: {request.worker_id} ({request.url}) with capacity {request.capacity}")
+    print(f"✅ Registered new worker: {request.worker_id} ({request.url})")
     return {"message": "Worker registered successfully", "worker_id": request.worker_id}
 
 @app.post("/api/start-bots")
@@ -112,14 +120,11 @@ async def start_bots(request: StartBotsRequest):
     if total_needed < 1:
         raise HTTPException(status_code=400, detail="Bot count must be at least 1.")
 
-    # Combine all workers (static + registered)
     all_workers = get_all_workers()
-    # Filter idle workers
     idle_workers = [w for w in all_workers if w["status"] == "idle" and w.get("used_bots", 0) == 0]
     if not idle_workers:
         raise HTTPException(status_code=400, detail="No idle workers available.")
 
-    # Allocate bots across idle workers (round-robin)
     total_capacity = sum(w["capacity"] for w in idle_workers)
     if total_needed > total_capacity:
         raise HTTPException(status_code=400, detail=f"Requested {total_needed} bots, but available capacity is {total_capacity}.")
@@ -138,7 +143,6 @@ async def start_bots(request: StartBotsRequest):
         total_started += take
         total_needed -= take
         allocated_workers.append(worker)
-        # Send start request to worker
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -157,7 +161,6 @@ async def start_bots(request: StartBotsRequest):
                     results.append({"worker": worker["name"], "status": "success", "bots": take})
                 else:
                     results.append({"worker": worker["name"], "status": "failed", "error": resp.text})
-                    # Reset worker state if failed
                     worker["status"] = "idle"
                     worker["active_meeting"] = None
                     worker["used_bots"] = 0
@@ -167,7 +170,6 @@ async def start_bots(request: StartBotsRequest):
             worker["active_meeting"] = None
             worker["used_bots"] = 0
 
-    # Track meeting
     if request.meeting_code not in active_meetings:
         active_meetings[request.meeting_code] = {
             "started_at": datetime.now(timezone(timedelta(hours=5, minutes=30))).isoformat(),
@@ -213,9 +215,7 @@ async def kill_meeting(request: KillMeetingRequest):
         except Exception as e:
             results.append({"worker": worker["name"], "status": "failed", "error": str(e)})
 
-    # Remove meeting
     del active_meetings[meeting_code]
-
     return {
         "success": True,
         "message": f"Killed meeting {meeting_code}",
@@ -228,7 +228,6 @@ async def toggle_billing(request: dict):
     enabled = request.get("enabled", True)
     billing_enabled = enabled
     if not enabled:
-        # Kill all active meetings
         for meeting_code in list(active_meetings.keys()):
             meeting = active_meetings[meeting_code]
             for worker in meeting["workers"]:
