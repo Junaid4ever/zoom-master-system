@@ -20,22 +20,11 @@ app.add_middleware(
 )
 
 # ============================================
-# CONFIGURATION
+# CONFIGURATION — NO STATIC WORKERS (Only registered workers)
 # ============================================
-# Static worker (your main 24GB RAM worker)
-STATIC_WORKERS = [
-    {
-        "id": 1,
-        "name": "zoom-worker-1",
-        "url": "https://zoom-worker-production-9981.up.railway.app",
-        "capacity": 50,
-        "status": "idle",
-        "active_meeting": None,
-        "used_bots": 0
-    }
-]
+STATIC_WORKERS = []  # <-- Disabled static worker
 
-# Dynamic registered workers (from CodeSandbox, etc.)
+# Dynamic registered workers (from CodeSandbox)
 REGISTERED_WORKERS = []  # each: {"worker_id": str, "url": str, "capacity": int, "status": str}
 
 # ============================================
@@ -97,8 +86,12 @@ async def register_worker(request: RegisterWorkerRequest):
     """Register a new worker (from CodeSandbox or any other source)."""
     # Check if already registered
     for w in REGISTERED_WORKERS:
-        if w["url"] == request.url:
-            return {"message": "Worker already registered", "worker_id": w["worker_id"]}
+        if w["worker_id"] == request.worker_id:
+            # Update URL and capacity if changed
+            w["url"] = request.url
+            w["capacity"] = request.capacity
+            print(f"🔄 Updated worker: {request.worker_id} -> {request.url}")
+            return {"message": "Worker updated", "worker_id": request.worker_id}
     
     REGISTERED_WORKERS.append({
         "worker_id": request.worker_id,
@@ -220,6 +213,7 @@ async def kill_meeting(request: KillMeetingRequest):
         except Exception as e:
             results.append({"worker": worker["name"], "status": "failed", "error": str(e)})
 
+    # Remove meeting
     del active_meetings[meeting_code]
 
     return {
