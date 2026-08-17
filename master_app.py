@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uvicorn
-# test redeploy
 
 app = FastAPI()
 
@@ -23,16 +22,29 @@ async def root():
     }
 
 @app.get("/api/status")
-async def status():
+async def get_status():
     return {
         "total_capacity": 35,
         "running_bots": 0,
         "available_bots": 35,
         "used_workers": 0,
         "available_workers": 35,
-        "workers": [],
+        "workers": [
+            {
+                "id": 1,
+                "name": "zoom-worker-1",
+                "url": "https://YOUR-WORKER-URL.up.railway.app",
+                "capacity": 35,
+                "status": "idle",
+                "used_bots": 0
+            }
+        ],
         "active_meetings": {}
     }
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
