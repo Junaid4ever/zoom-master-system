@@ -1,0 +1,6 @@
+#!/bin/bash
+# Install Playwright and its browser
+pip install playwright
+playwright install chromium-headless-shell
+# (Optional) verify installation
+playwright --version
